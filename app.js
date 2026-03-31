@@ -54,6 +54,8 @@ const state = {
   messageTimeoutId: 0,
 };
 
+const boardSquares = new Map();
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -213,73 +215,64 @@ function findKingSquare(game, color) {
   return "";
 }
 
-function renderBoard() {
-  const displayGame = getDisplayedGame();
-  const lastMove = getLastMove(displayGame);
-  const checkSquare = findKingSquare(displayGame, displayGame.turn());
-  const atLatest = !isViewingHistory();
+function getKnightFacingClass(piece, fileIndex) {
+  return piece.type === "n"
+    ? (fileIndex < 4 ? "piece-left-facing" : "piece-right-facing")
+    : "";
+}
+
+function createPieceElement(piece, fileIndex, rank) {
+  const displayMetrics = getPieceDisplayMetrics(fileIndex, rank);
+  const knightFacingClass = getKnightFacingClass(piece, fileIndex);
+  const pieceElement = document.createElement("span");
+  const pieceShadow = document.createElement("span");
+  const pieceCore = document.createElement("span");
+  const pieceBase = document.createElement("span");
+  const pieceBody = document.createElement("span");
+  const pieceTop = document.createElement("span");
+  const pieceDetail = document.createElement("span");
+
+  pieceElement.className = `piece piece-${piece.type} ${knightFacingClass} ${piece.color === "w" ? "white" : "black"}`.trim();
+  pieceShadow.className = "piece-shadow";
+  pieceCore.className = "piece-core";
+  pieceBase.className = "piece-base";
+  pieceBody.className = "piece-body";
+  pieceTop.className = "piece-top";
+  pieceDetail.className = "piece-detail";
+  pieceElement.style.setProperty("--piece-height-scale", displayMetrics.heightScale.toFixed(3));
+  pieceElement.style.setProperty("--piece-size-scale", displayMetrics.sizeScale.toFixed(3));
+  pieceElement.style.setProperty("--piece-lift", `${displayMetrics.lift.toFixed(1)}px`);
+  pieceCore.append(pieceBase, pieceBody, pieceTop, pieceDetail);
+  pieceElement.append(pieceShadow, pieceCore);
+  return pieceElement;
+}
+
+function getPieceKey(piece, fileIndex) {
+  if (!piece) {
+    return "";
+  }
+
+  return `${piece.color}:${piece.type}:${getKnightFacingClass(piece, fileIndex)}`;
+}
+
+function ensureBoardSquares() {
+  if (boardSquares.size) {
+    return;
+  }
+
   const fragment = document.createDocumentFragment();
 
   for (let rank = 8; rank >= 1; rank -= 1) {
     for (let fileIndex = 0; fileIndex < FILES.length; fileIndex += 1) {
       const file = FILES[fileIndex];
       const squareName = `${file}${rank}`;
-      const piece = displayGame.get(squareName);
       const squareButton = document.createElement("button");
 
       squareButton.type = "button";
       squareButton.className = `square ${squareColor(fileIndex, rank)}`;
       squareButton.dataset.square = squareName;
+      squareButton.dataset.pieceKey = "";
       squareButton.setAttribute("role", "gridcell");
-      squareButton.setAttribute("aria-label", describeSquare(squareName, piece));
-
-      if (atLatest && piece && piece.color === "w" && displayGame.turn() === "w" && !state.aiThinking) {
-        squareButton.classList.add("selectable");
-      }
-
-      if (state.selectedSquare === squareName) {
-        squareButton.classList.add("selected");
-      }
-
-      if (state.legalTargets.includes(squareName)) {
-        squareButton.classList.add("legal");
-      }
-
-      if (lastMove && (lastMove.from === squareName || lastMove.to === squareName)) {
-        squareButton.classList.add("last-move");
-      }
-
-      if (displayGame.isCheck() && checkSquare === squareName) {
-        squareButton.classList.add("check");
-      }
-
-      if (piece) {
-        const displayMetrics = getPieceDisplayMetrics(fileIndex, rank);
-        const knightFacingClass = piece.type === "n"
-          ? (fileIndex < 4 ? "piece-left-facing" : "piece-right-facing")
-          : "";
-        const pieceElement = document.createElement("span");
-        const pieceShadow = document.createElement("span");
-        const pieceCore = document.createElement("span");
-        const pieceBase = document.createElement("span");
-        const pieceBody = document.createElement("span");
-        const pieceTop = document.createElement("span");
-        const pieceDetail = document.createElement("span");
-
-        pieceElement.className = `piece piece-${piece.type} ${knightFacingClass} ${piece.color === "w" ? "white" : "black"} ${lastMove?.to === squareName ? "glimmer" : ""}`.trim();
-        pieceShadow.className = "piece-shadow";
-        pieceCore.className = "piece-core";
-        pieceBase.className = "piece-base";
-        pieceBody.className = "piece-body";
-        pieceTop.className = "piece-top";
-        pieceDetail.className = "piece-detail";
-        pieceElement.style.setProperty("--piece-height-scale", displayMetrics.heightScale.toFixed(3));
-        pieceElement.style.setProperty("--piece-size-scale", displayMetrics.sizeScale.toFixed(3));
-        pieceElement.style.setProperty("--piece-lift", `${displayMetrics.lift.toFixed(1)}px`);
-        pieceCore.append(pieceBase, pieceBody, pieceTop, pieceDetail);
-        pieceElement.append(pieceShadow, pieceCore);
-        squareButton.append(pieceElement);
-      }
 
       if (rank === 1) {
         const fileLabel = document.createElement("span");
@@ -295,11 +288,68 @@ function renderBoard() {
         squareButton.append(rankLabel);
       }
 
+      boardSquares.set(squareName, squareButton);
       fragment.append(squareButton);
     }
   }
 
   boardElement.replaceChildren(fragment);
+}
+
+function renderBoard() {
+  ensureBoardSquares();
+
+  const displayGame = getDisplayedGame();
+  const lastMove = getLastMove(displayGame);
+  const checkSquare = findKingSquare(displayGame, displayGame.turn());
+  const atLatest = !isViewingHistory();
+  const isCheck = displayGame.isCheck();
+
+  for (let rank = 8; rank >= 1; rank -= 1) {
+    for (let fileIndex = 0; fileIndex < FILES.length; fileIndex += 1) {
+      const file = FILES[fileIndex];
+      const squareName = `${file}${rank}`;
+      const piece = displayGame.get(squareName);
+      const squareButton = boardSquares.get(squareName);
+      const pieceKey = getPieceKey(piece, fileIndex);
+      let pieceElement = squareButton.querySelector(".piece");
+
+      squareButton.setAttribute("aria-label", describeSquare(squareName, piece));
+      squareButton.className = `square ${squareColor(fileIndex, rank)}`;
+      squareButton.classList.toggle(
+        "selectable",
+        atLatest && piece && piece.color === "w" && displayGame.turn() === "w" && !state.aiThinking,
+      );
+      squareButton.classList.toggle("selected", state.selectedSquare === squareName);
+      squareButton.classList.toggle("legal", state.legalTargets.includes(squareName));
+      squareButton.classList.toggle(
+        "last-move",
+        Boolean(lastMove && (lastMove.from === squareName || lastMove.to === squareName)),
+      );
+      squareButton.classList.toggle("check", isCheck && checkSquare === squareName);
+
+      if (!piece) {
+        if (pieceElement) {
+          pieceElement.remove();
+        }
+
+        squareButton.dataset.pieceKey = "";
+        continue;
+      }
+
+      if (!pieceElement || squareButton.dataset.pieceKey !== pieceKey) {
+        if (pieceElement) {
+          pieceElement.remove();
+        }
+
+        pieceElement = createPieceElement(piece, fileIndex, rank);
+        squareButton.prepend(pieceElement);
+        squareButton.dataset.pieceKey = pieceKey;
+      }
+
+      pieceElement.classList.toggle("glimmer", lastMove?.to === squareName);
+    }
+  }
 }
 
 function buildStatusMessage(game, historyLength, displayPly) {
@@ -574,7 +624,6 @@ function render() {
   applyBoardView();
   renderStatus();
   renderHistory();
-  renderSaveSlots();
   renderControls();
 }
 
@@ -756,6 +805,7 @@ function saveSlot(slotId) {
     setMessage("存檔失敗，請稍後再試。");
   }
 
+  renderSaveSlots();
   render();
 }
 
@@ -778,6 +828,7 @@ function loadSlotIntoGame(slotId) {
 function deleteSlot(slotId) {
   localStorage.removeItem(`${SLOT_PREFIX}${slotId}`);
   setMessage(`已清除存檔 ${slotId}。`);
+  renderSaveSlots();
   render();
 }
 
@@ -1052,6 +1103,7 @@ function boot() {
   loadAuto();
   registerEvents();
   registerServiceWorker();
+  renderSaveSlots();
   render();
   maybeRunAiMove();
 }
