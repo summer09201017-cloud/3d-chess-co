@@ -1,4 +1,4 @@
-const CACHE_NAME = "3d-chess-co-v7";
+const CACHE_NAME = "3d-chess-co-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,7 +6,7 @@ const APP_SHELL = [
   "./app.js",
   "./ai.js",
   "./manifest.webmanifest",
-  "./node_modules/chess.js/dist/esm/chess.js",
+  "./vendor/chess.js",
   "./assets/favicon.svg",
   "./assets/icon-192.png",
   "./assets/icon-512.png",

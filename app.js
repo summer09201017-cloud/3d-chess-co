@@ -1,4 +1,4 @@
-import { Chess } from "./node_modules/chess.js/dist/esm/chess.js";
+import { Chess } from "./vendor/chess.js";
 import { DIFFICULTY_PRESETS, getBestMove } from "./ai.js";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
