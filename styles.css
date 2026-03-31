@@ -989,8 +989,8 @@ select {
   }
 
   .app-shell {
-    width: min(100% - 18px, 980px);
-    padding-top: 10px;
+    width: min(100% - 10px, 980px);
+    padding-top: 8px;
   }
 
   .hero-card,
@@ -1005,16 +1005,27 @@ select {
 
   .scene-wrap {
     min-height: auto;
-    padding: 14px;
+    padding: 8px;
+    border-radius: 24px;
   }
 
   .board {
-    padding: 10px;
-    gap: 3px;
+    width: min(100vw - 20px, 760px);
+    padding: 6px;
+    gap: 2px;
+    border-radius: 24px;
   }
 
   .square {
-    border-radius: 10px;
+    border-radius: 9px;
+  }
+
+  .piece {
+    --piece-lift: 38px;
+    --piece-size-scale: 1.12;
+    --piece-height-scale: 1.4;
+    width: 88%;
+    height: 144%;
   }
 
   .board-toolbar {

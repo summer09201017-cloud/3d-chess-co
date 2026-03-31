@@ -1,4 +1,4 @@
-const CACHE_NAME = "3d-chess-co-v8";
+const CACHE_NAME = "3d-chess-co-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
