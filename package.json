@@ -1,0 +1,12 @@
+{
+  "name": "3d-chess-co",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "py -m http.server 4174"
+  },
+  "dependencies": {
+    "chess.js": "^1.4.0"
+  }
+}

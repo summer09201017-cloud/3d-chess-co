@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="3D西洋棋CO">
+    <meta
+      name="description"
+      content="可在手機與電腦執行、支援安裝成 APP 的 3D 西洋棋。內建 AI 難度、悔棋、步數回看與存檔功能。"
+    >
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./assets/icon-192.png">
+    <link rel="stylesheet" href="./styles.css">
+    <title>3D西洋棋 CO</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero-card">
+        <div class="hero-copy">
+          <p class="eyebrow">3D Chess for Mobile + Desktop</p>
+          <h1>3D西洋棋 CO</h1>
+          <p class="hero-text">
+            可安裝成手機與桌機 APP，支援 AI 強度切換、悔棋、前後步回看與本機存檔。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <button id="installButton" class="primary-button" type="button" hidden>安裝 APP</button>
+          <button id="newGameButton" class="secondary-button" type="button">重新開局</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="board-panel">
+          <div class="scene-wrap">
+            <div id="boardScene" class="board-scene">
+              <div id="board" class="board" role="grid" aria-label="西洋棋棋盤"></div>
+            </div>
+          </div>
+
+          <div class="board-toolbar">
+            <button id="undoButton" class="secondary-button" type="button">悔棋</button>
+            <button id="prevMoveButton" class="secondary-button" type="button">上一步</button>
+            <button id="nextMoveButton" class="secondary-button" type="button">下一步</button>
+            <button id="latestMoveButton" class="secondary-button" type="button">回到最新</button>
+            <button id="continueFromHereButton" class="secondary-button" type="button">從這裡續玩</button>
+          </div>
+
+          <div class="status-card">
+            <p id="statusText" class="status-text">準備開局，白方先手。</p>
+            <p id="installHint" class="install-hint"></p>
+          </div>
+        </section>
+
+        <aside class="control-column">
+          <section class="card">
+            <div class="card-header">
+              <h2>對戰設定</h2>
+            </div>
+
+            <label class="field">
+              <span>AI 強度</span>
+              <select id="difficultySelect">
+                <option value="easy">輕鬆</option>
+                <option value="medium" selected>標準</option>
+                <option value="hard">高手</option>
+              </select>
+            </label>
+
+            <div class="legend">
+              <span class="legend-chip">白方：玩家</span>
+              <span class="legend-chip">黑方：AI</span>
+              <span class="legend-chip">升變：預設皇后</span>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h2>對局資訊</h2>
+            </div>
+
+            <div class="info-grid">
+              <article class="info-tile">
+                <span>輪到</span>
+                <strong id="turnValue">白方</strong>
+              </article>
+              <article class="info-tile">
+                <span>局面</span>
+                <strong id="modeValue">即時</strong>
+              </article>
+              <article class="info-tile">
+                <span>手數</span>
+                <strong id="moveCountValue">0</strong>
+              </article>
+              <article class="info-tile">
+                <span>最後一步</span>
+                <strong id="lastMoveValue">尚未開始</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h2>棋盤顯示</h2>
+            </div>
+
+            <label class="field">
+              <span>顯示模式</span>
+              <select id="displayModeSelect">
+                <option value="3d" selected>3D 立體</option>
+                <option value="2d">2D 平面</option>
+              </select>
+            </label>
+
+            <div class="view-actions">
+              <button id="rotateLeftButton" class="secondary-button" type="button">向左轉 45°</button>
+              <button id="rotateResetButton" class="ghost-button" type="button">重設視角</button>
+              <button id="rotateRightButton" class="secondary-button" type="button">向右轉 45°</button>
+            </div>
+
+            <label class="field">
+              <span>水平旋轉</span>
+              <input id="rotationRange" class="range-input" type="range" min="0" max="359" step="1" value="0">
+            </label>
+
+            <label class="field">
+              <span>俯視角度</span>
+              <input id="tiltRange" class="range-input" type="range" min="20" max="76" step="1" value="58">
+            </label>
+
+            <p id="viewHint" class="slot-meta">可拖曳棋盤或用按鈕、滑桿調整 360 度視角。</p>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h2>存檔區</h2>
+            </div>
+            <div id="saveSlots" class="save-slots" aria-live="polite"></div>
+          </section>
+
+          <section class="card move-history-card">
+            <div class="card-header">
+              <h2>步數回看</h2>
+              <button id="jumpStartButton" class="ghost-button" type="button">回起點</button>
+            </div>
+            <div id="historyList" class="history-list" aria-live="polite"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

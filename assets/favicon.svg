@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#173258" />
+      <stop offset="100%" stop-color="#0a1220" />
+    </linearGradient>
+    <linearGradient id="tileLight" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8efd8" />
+      <stop offset="100%" stop-color="#d4b68a" />
+    </linearGradient>
+    <linearGradient id="tileDark" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#9e7043" />
+      <stop offset="100%" stop-color="#5a321b" />
+    </linearGradient>
+    <linearGradient id="piece" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#9cc7ff" />
+      <stop offset="100%" stop-color="#eff6ff" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)" />
+  <g transform="translate(44 52)">
+    <rect x="0" y="48" width="168" height="104" rx="24" fill="#4b311b" opacity="0.45" />
+    <g transform="skewY(-16)">
+      <rect x="0" y="28" width="84" height="42" rx="10" fill="url(#tileLight)" />
+      <rect x="84" y="28" width="84" height="42" rx="10" fill="url(#tileDark)" />
+      <rect x="0" y="70" width="84" height="42" rx="10" fill="url(#tileDark)" />
+      <rect x="84" y="70" width="84" height="42" rx="10" fill="url(#tileLight)" />
+    </g>
+    <g transform="translate(84 6)">
+      <path
+        d="M28 14c11 0 20 9 20 20 0 8-5 15-12 18l6 16h8c7 0 12 5 12 12v8H-6v-8c0-7 5-12 12-12h8l6-16c-7-3-12-10-12-18 0-11 9-20 20-20z"
+        fill="url(#piece)"
+      />
+      <circle cx="28" cy="14" r="10" fill="#fef3c7" />
+    </g>
+  </g>
+</svg>
