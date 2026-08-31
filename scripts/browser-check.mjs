@@ -1,0 +1,96 @@
+// 🔬 每日殘局真瀏覽器冒煙(playwright-core + 系統 Edge/Chrome)。
+// 跑法:node scripts/browser-check.mjs   (先起本機伺服器,或 CHECK_URL=線上網址)
+// 驗:每日鈕 → 開局=今天的 FEN → 白方走同一條 handleSquareClick 管線把今天的題解掉 →
+//     將死訊息+戰績記一筆;悔棋解鎖再記;每日模式不寫自動存檔。
+import { chromium } from "playwright-core";
+
+const URL = process.env.CHECK_URL || "http://localhost:8796";
+let browser = null;
+for (const channel of ["msedge", "chrome"]) {
+  try { browser = await chromium.launch({ channel, headless: true }); break; }
+  catch { /* 換下一個 */ }
+}
+if (!browser) { console.error("找不到系統 Edge/Chrome"); process.exit(1); }
+
+let pass = 0, fail = 0;
+const ok = (cond, msg, note = "") => {
+  if (cond) { pass++; console.log("  ✓ " + msg); }
+  else { fail++; console.error("  ✗ " + msg + (note ? " → " + note : "")); }
+};
+
+const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+const errors = [];
+page.on("pageerror", (e) => errors.push(String(e)));
+await page.goto(URL + "/?v=" + Date.now(), { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+
+ok(await page.locator("#dailyButton").count() === 1, "有「📅 每日殘局」鈕");
+ok((await page.locator("#verTag").textContent()).includes("每日殘局"), "verTag 帶版本簡歷");
+
+await page.evaluate(() => localStorage.removeItem("3d-chess-co:daily:v1"));
+await page.click("#dailyButton");
+await page.waitForTimeout(600);
+
+const st = await page.evaluate(() => {
+  const s = window.__chess.state;
+  return { key: s.daily?.key, name: s.daily?.puzzle?.name, mateIn: s.daily?.puzzle?.mateIn,
+    fenOk: s.game.fen().split(" ")[0] === s.daily?.puzzle?.fen.split(" ")[0],
+    line: document.querySelector("#dailyLine")?.textContent || "" };
+});
+ok(!!st.key && st.fenOk, `開局=今天的題(${st.key}「${st.name}」目標 ${st.mateIn} 步)`, JSON.stringify(st));
+ok(st.line.includes("已走 0 步"), "常駐狀態行在(已走 0 步)", st.line);
+
+// 白方解題:窮舉「仍在必殺樹上」的那步(chess.js 就在頁面裡,直接借它算)
+const end = await page.evaluate(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const { Chess } = await import("./vendor/chess.js");
+  function canMate(game, n) {
+    if (n <= 0) return false;
+    const moves = game.moves({ verbose: true });
+    for (const m of moves) {
+      game.move(m);
+      if (game.isCheckmate()) { game.undo(); return true; }
+      if (game.isGameOver()) { game.undo(); continue; }
+      let allDead = n > 1;
+      if (allDead) for (const r of game.moves({ verbose: true })) { game.move(r); const d = canMate(game, n - 1); game.undo(); if (!d) { allDead = false; break; } }
+      game.undo();
+      if (allDead) return true;
+    }
+    return false;
+  }
+  const S = window.__chess;
+  const target = S.state.daily.puzzle.mateIn;
+  for (let guard = 0; guard < 12 && !S.state.game.isGameOver(); guard++) {
+    while (S.state.game.turn() !== "w" && !S.state.game.isGameOver()) await sleep(150);
+    if (S.state.game.isGameOver()) break;
+    const left = target - S.whiteMoveCount();
+    const probe = new Chess(S.state.game.fen());
+    let picked = null;
+    for (const m of probe.moves({ verbose: true })) {
+      probe.move(m);
+      const good = probe.isCheckmate() || (!probe.isGameOver()
+        && probe.moves({ verbose: true }).every((r) => { probe.move(r); const d = canMate(probe, left - 1); probe.undo(); return d; }));
+      probe.undo();
+      if (good) { picked = m; break; }
+    }
+    if (!picked) break;
+    S.handleSquareClick(picked.from);   // 與真手指同一條輸入管線
+    S.handleSquareClick(picked.to);
+    await sleep(900);                    // 等 AI 回手
+  }
+  await sleep(800);
+  return { mated: S.state.game.isCheckmate() && S.state.game.turn() === "b",
+    moves: S.whiteMoveCount(), target,
+    status: document.querySelector("#statusText").textContent,
+    store: localStorage.getItem("3d-chess-co:daily:v1"),
+    auto: localStorage.getItem("3d-chess-co:auto-save:v1") };
+});
+ok(end.mated && end.moves <= end.target, `白方 ${end.moves} 步將死(目標 ${end.target})`, JSON.stringify(end));
+ok(end.status.includes("將死") || end.status.includes("新紀錄"), "結算訊息講了將死/新紀錄", end.status);
+const rec = JSON.parse(end.store || "{}");
+ok(rec[st.key] === end.moves, "戰績記了今天最少步(" + end.store + ")");
+ok(errors.length === 0, "整場零 pageerror", errors.join(" | ").slice(0, 200));
+
+await browser.close();
+console.log(`\n🔬 browser-check:${pass} 過 / ${fail} 失敗`);
+process.exit(fail ? 1 : 0);

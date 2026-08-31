@@ -1,5 +1,6 @@
 import { Chess } from "./vendor/chess.js";
 import { DIFFICULTY_PRESETS, getBestMove } from "./ai.js";
+import { dailyPuzzleKey, puzzleForDate } from "./puzzles.js";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const AUTO_SAVE_KEY = "3d-chess-co:auto-save:v1";
@@ -52,6 +53,8 @@ const state = {
   deferredInstallPrompt: null,
   messageOverride: "",
   messageTimeoutId: 0,
+  daily: null,          // 📅 每日殘局:null=一般對局;{ key, index, puzzle }=今天這一題
+  dailySaved: false,    // 這一局的成績記過了沒(悔棋會解鎖,重殺可再記——取當日最少)
 };
 
 const boardSquares = new Map();
@@ -388,9 +391,26 @@ function buildStatusMessage(game, historyLength, displayPly) {
   return game.turn() === "w" ? "輪到白方，請選擇棋子後再點目的地。" : "輪到黑方，AI 即將落子。";
 }
 
+/* 📱 內建瀏覽器偵測(守門 #30):教會連結走 LINE 發,LINE 的 WebView 裝不了 APP——
+   開場就講「換瀏覽器」那一條,別讓人按一顆沒反應的鈕。只提醒不擋,遊戲照玩。 */
+const IN_APP_BROWSER = (() => {
+  const ua = navigator.userAgent || "";
+  if (/\bLine\//i.test(ua) || /\bLIFF\b/i.test(ua)) return { n: "LINE", m: "右上角「⋯」→「用其他瀏覽器開啟」" };
+  if (/FBAN|FBAV|FB_IAB|FB4A/i.test(ua)) return { n: "Facebook", m: "右上角「⋯」→「在外部瀏覽器中開啟」" };
+  if (/Instagram/i.test(ua)) return { n: "Instagram", m: "右上角「⋯」→「在瀏覽器中開啟」" };
+  if (/MicroMessenger/i.test(ua)) return { n: "微信", m: "右上角「⋯」→「在瀏覽器中開啟」" };
+  return null;
+})();
+
 function updateInstallState() {
   const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
   const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+
+  if (IN_APP_BROWSER) {
+    installButtonElement.hidden = true;
+    installHintElement.textContent = `你正用 ${IN_APP_BROWSER.n} 內建瀏覽器開啟——要安裝 APP 請先點${IN_APP_BROWSER.m}。遊戲本身可以直接玩!`;
+    return;
+  }
 
   if (isStandalone) {
     installButtonElement.hidden = true;
@@ -433,6 +453,15 @@ function renderStatus() {
   moveCountValueElement.textContent = String(displayPly);
   lastMoveValueElement.textContent = lastMove?.san ?? "尚未開始";
   statusTextElement.textContent = state.messageOverride || buildStatusMessage(displayGame, history.length, displayPly);
+
+  // 📅 每日殘局的常駐狀態行(題名/目標步數/已走幾步)——放獨立元素,不跟訊息搶位子
+  const dailyLine = document.querySelector("#dailyLine");
+  if (dailyLine) {
+    dailyLine.hidden = !state.daily;
+    if (state.daily) {
+      dailyLine.textContent = `📅 每日殘局 ${state.daily.key}「${state.daily.puzzle.name}」・目標 ${state.daily.puzzle.mateIn} 步將死・已走 ${whiteMoveCount()} 步`;
+    }
+  }
 
   updateInstallState();
 }
@@ -527,6 +556,9 @@ function createSavePayload({ useVisiblePly = true } = {}) {
 }
 
 function saveAuto() {
+  /* 📅 每日殘局不進自動存檔:存檔格式是「從標準開局重播棋譜」,
+     殘局是自訂 FEN 起手 ⇒ 重播會重建出完全不同的局面(靜默壞檔)。 */
+  if (state.daily) return;
   try {
     localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(createSavePayload({ useVisiblePly: false })));
   } catch (error) {
@@ -676,6 +708,7 @@ function handleSquareClick(squareName) {
     state.displayPly = null;
     saveAuto();
     render();
+    evaluateDaily();     // 📅 白方這一步若將死=記今天的成績
     maybeRunAiMove();
     return;
   }
@@ -726,6 +759,7 @@ function undoRound() {
   cancelAiThink();
   clearSelection();
   state.displayPly = null;
+  state.dailySaved = false;   // 📅 悔棋後重新將死可再記(取當日最少,不會灌水)
 
   const steps = state.game.turn() === "w" ? 2 : 1;
 
@@ -797,6 +831,10 @@ function loadAuto() {
 }
 
 function saveSlot(slotId) {
+  if (state.daily) {   // 📅 理由同 saveAuto:棋譜重播式存檔吃不下自訂 FEN 起手
+    setMessage("每日殘局不用存檔——明天自動換新題,今天的最佳步數已另外記著!");
+    return;
+  }
   try {
     localStorage.setItem(`${SLOT_PREFIX}${slotId}`, JSON.stringify(createSavePayload()));
     setMessage(`已存到存檔 ${slotId}。`);
@@ -854,10 +892,60 @@ async function handleInstallClick() {
 function startNewGame() {
   cancelAiThink();
   state.game = new Chess();
+  state.daily = null;        // 離開每日模式,回一般對局
+  state.dailySaved = false;
   state.displayPly = null;
   clearSelection();
   saveAuto();
   render();
+}
+
+/* ══ 📅 每日殘局(N 步殺)══
+   每天一題、全世界同一題;題目的 mateIn 不是宣稱,是 test/daily.mjs 的窮舉證明。
+   黑方=站上原本的 AI(任何難度都行:必殺樹涵蓋**所有**防守,照解法走一定 ≤N 步殺)。 */
+const DAILY_STORE_KEY = "3d-chess-co:daily:v1";
+function loadDailyBook() {
+  try { const s = JSON.parse(localStorage.getItem(DAILY_STORE_KEY) || "{}"); return s && typeof s === "object" ? s : {}; }
+  catch { return {}; }
+}
+function saveDailyResult(key, moves) {
+  const all = loadDailyBook();
+  const prev = all[key] | 0;
+  const isNewBest = !prev || moves < prev;
+  if (isNewBest) all[key] = moves;
+  const days = Object.keys(all).sort();
+  while (days.length > 60) delete all[days.shift()];   // 只留 60 天
+  try { localStorage.setItem(DAILY_STORE_KEY, JSON.stringify(all)); } catch { /* 私密模式照玩 */ }
+  return { best: all[key] || moves, isNewBest };
+}
+function whiteMoveCount() {
+  return Math.ceil(state.game.history().length / 2);   // 悔棋/續玩都自動算對(從棋譜推,不另計數)
+}
+function startDailyGame() {
+  cancelAiThink();
+  state.daily = puzzleForDate(dailyPuzzleKey());
+  state.dailySaved = false;
+  state.game = new Chess(state.daily.puzzle.fen);
+  state.displayPly = null;
+  clearSelection();
+  const best = loadDailyBook()[state.daily.key] | 0;
+  setMessage(`📅 ${state.daily.key}「${state.daily.puzzle.name}」——${state.daily.puzzle.hint}`
+    + (best ? `(你今天的最佳:${best} 步)` : ""), 7000);
+  render();
+}
+/** 白方將死黑王的那一刻:記成績+講話(只在每日模式) */
+function evaluateDaily() {
+  if (!state.daily || state.dailySaved) return;
+  if (state.game.isCheckmate() && state.game.turn() === "b") {
+    state.dailySaved = true;
+    const moves = whiteMoveCount();
+    const target = state.daily.puzzle.mateIn;
+    const r = saveDailyResult(state.daily.key, moves);
+    setMessage(`📅 將死!用了 ${moves} 步(目標 ${target} 步)`
+      + (moves <= target ? "——滿分!" : "")
+      + (r.isNewBest ? " 今天的新紀錄!" : `(今天最佳 ${r.best} 步)`)
+      + " 明天有新題!", 15000);
+  }
 }
 
 function rotateBoardBy(delta) {
@@ -1013,6 +1101,7 @@ function registerEvents() {
 
   installButtonElement.addEventListener("click", handleInstallClick);
   newGameButtonElement.addEventListener("click", startNewGame);
+  document.querySelector("#dailyButton")?.addEventListener("click", startDailyGame);
   undoButtonElement.addEventListener("click", undoRound);
   prevMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() - 1));
   nextMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() + 1));
@@ -1109,3 +1198,6 @@ function boot() {
 }
 
 boot();
+
+// 測試掛勾(驗收腳本用;艦隊慣例)——真人操作不經過它
+window.__chess = { state, startDailyGame, whiteMoveCount, handleSquareClick };

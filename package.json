@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "serve": "py -m http.server 4174"
+    "serve": "py -m http.server 4174",
+    "test": "node test/daily.mjs"
   },
   "dependencies": {
     "chess.js": "^1.4.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
   }
 }

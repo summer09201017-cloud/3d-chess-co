@@ -1,10 +1,11 @@
-const CACHE_NAME = "3d-chess-co-v10";
+const CACHE_NAME = "3d-chess-co-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./ai.js",
+  "./puzzles.js",
   "./manifest.webmanifest",
   "./vendor/chess.js",
   "./assets/favicon.svg",
