@@ -1,6 +1,6 @@
 import { Chess } from "./vendor/chess.js";
 import { DIFFICULTY_PRESETS, getBestMove } from "./ai.js";
-import { dailyPuzzleKey, puzzleForDate } from "./puzzles.js";
+import { dailyPuzzleKey, puzzlesForDate } from "./puzzles.js";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const AUTO_SAVE_KEY = "3d-chess-co:auto-save:v1";
@@ -459,7 +459,10 @@ function renderStatus() {
   if (dailyLine) {
     dailyLine.hidden = !state.daily;
     if (state.daily) {
-      dailyLine.textContent = `📅 每日殘局 ${state.daily.key}「${state.daily.puzzle.name}」・目標 ${state.daily.puzzle.mateIn} 步將死・已走 ${whiteMoveCount()} 步`;
+      const prog = dailyProgress();
+      dailyLine.textContent = `📅 ${state.daily.key} 第 ${state.daily.n + 1}/${prog ? prog.total : 1} 題`
+        + `(今天已解 ${prog ? prog.done : 0} 題)「${state.daily.puzzle.name}」`
+        + `・目標 ${state.daily.puzzle.mateIn} 步・已走 ${whiteMoveCount()} 步`;
     }
   }
 
@@ -903,34 +906,70 @@ function startNewGame() {
 /* ══ 📅 每日殘局(N 步殺)══
    每天一題、全世界同一題;題目的 mateIn 不是宣稱,是 test/daily.mjs 的窮舉證明。
    黑方=站上原本的 AI(任何難度都行:必殺樹涵蓋**所有**防守,照解法走一定 ≤N 步殺)。 */
+/* ══ 戰績:{ "YYYY-MM-DD": { solved: { 題目id: 那題最少步數 } } } ══
+   一天一組多題 ⇒ **每題分開記**(才知道今天解了幾題、哪題還沒解)。
+   ⚠ 舊格式(單題版是 `日期: 步數`)讀進來沒有 solved ⇒ 視為未解、可重解;
+     不炸、不誤報(這是刻意的寬鬆遷移:舊資料只有「今天」那一天,隔天自然消失)。 */
 const DAILY_STORE_KEY = "3d-chess-co:daily:v1";
 function loadDailyBook() {
   try { const s = JSON.parse(localStorage.getItem(DAILY_STORE_KEY) || "{}"); return s && typeof s === "object" ? s : {}; }
   catch { return {}; }
 }
-function saveDailyResult(key, moves) {
+function dayRecord(book, key) {
+  const d = book[key];
+  return (d && typeof d === "object" && d.solved) ? d : { solved: {} };
+}
+function saveDailyResult(key, puzzleId, moves) {
   const all = loadDailyBook();
-  const prev = all[key] | 0;
+  const day = dayRecord(all, key);
+  const prev = day.solved[puzzleId] | 0;
   const isNewBest = !prev || moves < prev;
-  if (isNewBest) all[key] = moves;
+  if (isNewBest) day.solved[puzzleId] = moves;
+  all[key] = day;
   const days = Object.keys(all).sort();
   while (days.length > 60) delete all[days.shift()];   // 只留 60 天
   try { localStorage.setItem(DAILY_STORE_KEY, JSON.stringify(all)); } catch { /* 私密模式照玩 */ }
-  return { best: all[key] || moves, isNewBest };
+  return { best: day.solved[puzzleId], isNewBest, solvedCount: Object.keys(day.solved).length };
 }
 function whiteMoveCount() {
   return Math.ceil(state.game.history().length / 2);   // 悔棋/續玩都自動算對(從棋譜推,不另計數)
 }
-function startDailyGame() {
+/** 今天這一組的進度 */
+function dailyProgress() {
+  if (!state.daily) return null;
+  const solved = dayRecord(loadDailyBook(), state.daily.key).solved;
+  const done = state.daily.set.puzzles.filter((p) => solved[p.id]).length;
+  return { done, total: state.daily.set.puzzles.length, solved };
+}
+/** 還沒解、且不是現在這一題的下一題索引(-1=沒有了) */
+function nextUnsolvedIndex() {
+  const prog = dailyProgress();
+  if (!prog) return -1;
+  for (let i = 0; i < state.daily.set.puzzles.length; i += 1) {
+    if (!prog.solved[state.daily.set.puzzles[i].id] && i !== state.daily.n) return i;
+  }
+  return -1;
+}
+/** 開今天那一組的第 n 題(不給=今天還沒解的第一題) */
+function startDailyGame(n) {
   cancelAiThink();
-  state.daily = puzzleForDate(dailyPuzzleKey());
+  const key = dailyPuzzleKey();
+  const set = puzzlesForDate(key);
+  const solved = dayRecord(loadDailyBook(), key).solved;
+  const idx = Number.isInteger(n)
+    ? Math.max(0, Math.min(n, set.puzzles.length - 1))
+    : Math.max(0, set.puzzles.findIndex((p) => !solved[p.id]));   // -1(全解完)→ 0,可重玩
+  const puzzle = set.puzzles[idx];
+  state.daily = { key, set, n: idx, puzzle };
   state.dailySaved = false;
-  state.game = new Chess(state.daily.puzzle.fen);
+  state.game = new Chess(puzzle.fen);
   state.displayPly = null;
   clearSelection();
-  const best = loadDailyBook()[state.daily.key] | 0;
-  setMessage(`📅 ${state.daily.key}「${state.daily.puzzle.name}」——${state.daily.puzzle.hint}`
-    + (best ? `(你今天的最佳:${best} 步)` : ""), 7000);
+  const prog = dailyProgress();
+  const best = prog.solved[puzzle.id] | 0;
+  setMessage(`📅 ${key} 第 ${idx + 1}/${set.puzzles.length} 題(今天已解 ${prog.done} 題)`
+    + `「${puzzle.name}」目標 ${puzzle.mateIn} 步——${puzzle.hint}`
+    + (best ? `(這題你的最佳:${best} 步)` : ""), 8000);
   render();
 }
 /** 白方將死黑王的那一刻:記成績+講話(只在每日模式) */
@@ -939,12 +978,15 @@ function evaluateDaily() {
   if (state.game.isCheckmate() && state.game.turn() === "b") {
     state.dailySaved = true;
     const moves = whiteMoveCount();
-    const target = state.daily.puzzle.mateIn;
-    const r = saveDailyResult(state.daily.key, moves);
-    setMessage(`📅 將死!用了 ${moves} 步(目標 ${target} 步)`
-      + (moves <= target ? "——滿分!" : "")
-      + (r.isNewBest ? " 今天的新紀錄!" : `(今天最佳 ${r.best} 步)`)
-      + " 明天有新題!", 15000);
+    const { puzzle, set, key, n } = state.daily;
+    const r = saveDailyResult(key, puzzle.id, moves);
+    const total = set.puzzles.length;
+    setMessage(`📅 第 ${n + 1} 題將死!${moves} 步`
+      + (moves <= puzzle.mateIn ? "(滿分!)" : `(目標 ${puzzle.mateIn} 步)`)
+      + (r.isNewBest ? " 新紀錄!" : "")
+      + `・今天已解 ${r.solvedCount}/${total} 題`
+      + (r.solvedCount >= total ? " —— 今天全解完了,明天有新的一組!" : "(按「📅 每日殘局」接下一題)"), 15000);
+    render();
   }
 }
 
@@ -1101,7 +1143,9 @@ function registerEvents() {
 
   installButtonElement.addEventListener("click", handleInstallClick);
   newGameButtonElement.addEventListener("click", startNewGame);
-  document.querySelector("#dailyButton")?.addEventListener("click", startDailyGame);
+  /* ★ 包一層:直接掛 startDailyGame 會把 click event 當成 n 參數傳進去
+     (Number.isInteger(event) 是 false 所以剛好沒壞——但那是巧合,不留這種接線)。 */
+  document.querySelector("#dailyButton")?.addEventListener("click", () => startDailyGame());
   undoButtonElement.addEventListener("click", undoRound);
   prevMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() - 1));
   nextMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() + 1));

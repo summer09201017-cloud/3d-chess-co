@@ -10,6 +10,9 @@
 //   ② 題名用「殺法模式」的通稱(後排殺/雙車梯殺…),不冒名任何棋書名局。
 //   ③ FEN 是標準格式,白方先走。
 
+// 每天出幾題(一組)。★ 5 題=一次坐下來解得完、又有「今天全解」的成就感(0831 使用者點名)。
+export const DAILY_SET_SIZE = 5;
+
 export const DAILY_PUZZLES = [
   // ── 一步殺(暖身)──
   { id: "back-rank-1", name: "後排殺", mateIn: 1,
@@ -71,10 +74,41 @@ export function dailyPuzzleKey(now) {
   return new Date((now || Date.now()) + 8 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-// FNV-1a:日期字串 → 題庫索引(決定性,不用 Math.random)
-export function puzzleForDate(key) {
+// FNV-1a:日期字串 → 32 位種子(決定性,不用 Math.random)
+function dailySeed(key) {
   let h = 0x811c9dc5;
   for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-  const idx = h % DAILY_PUZZLES.length;
-  return { key, index: idx, puzzle: DAILY_PUZZLES[idx] };
+  return h >>> 0;
+}
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** 單題版(舊介面;=今天那一組的第一題) */
+export function puzzleForDate(key) {
+  const set = puzzlesForDate(key, 1);
+  return { key, index: set.indexes[0], puzzle: set.puzzles[0] };
+}
+
+/* ★ 每日一組(0831 使用者點名「不要只有 1 題」):
+     決定性 Fisher-Yates 抽 count 題**不重複**,再依 mateIn 由易到難排 ⇒
+     今天全世界拿到同一組、同一順序。count 超過題庫大小時自動夾住。 */
+export function puzzlesForDate(key, count = DAILY_SET_SIZE) {
+  const n = Math.max(1, Math.min(count | 0 || 1, DAILY_PUZZLES.length));
+  const rng = mulberry32(dailySeed(key));
+  const pool = DAILY_PUZZLES.map((_, i) => i);
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const indexes = pool.slice(0, n)
+    .sort((a, b) => DAILY_PUZZLES[a].mateIn - DAILY_PUZZLES[b].mateIn || a - b);
+  return { key, indexes, puzzles: indexes.map((i) => DAILY_PUZZLES[i]) };
 }

@@ -25,7 +25,7 @@ await page.goto(URL + "/?v=" + Date.now(), { waitUntil: "networkidle" });
 await page.waitForTimeout(900);
 
 ok(await page.locator("#dailyButton").count() === 1, "有「📅 每日殘局」鈕");
-ok((await page.locator("#verTag").textContent()).includes("每日殘局"), "verTag 帶版本簡歷");
+ok((await page.locator("#verTag").textContent()).includes("一組 5 題"), "verTag 講了一組 5 題");
 
 await page.evaluate(() => localStorage.removeItem("3d-chess-co:daily:v1"));
 await page.click("#dailyButton");
@@ -33,12 +33,14 @@ await page.waitForTimeout(600);
 
 const st = await page.evaluate(() => {
   const s = window.__chess.state;
-  return { key: s.daily?.key, name: s.daily?.puzzle?.name, mateIn: s.daily?.puzzle?.mateIn,
+  return { key: s.daily?.key, name: s.daily?.puzzle?.name, mateIn: s.daily?.puzzle?.mateIn, n: s.daily?.n,
+    total: s.daily?.set?.puzzles?.length,
     fenOk: s.game.fen().split(" ")[0] === s.daily?.puzzle?.fen.split(" ")[0],
     line: document.querySelector("#dailyLine")?.textContent || "" };
 });
 ok(!!st.key && st.fenOk, `開局=今天的題(${st.key}「${st.name}」目標 ${st.mateIn} 步)`, JSON.stringify(st));
-ok(st.line.includes("已走 0 步"), "常駐狀態行在(已走 0 步)", st.line);
+ok(st.total === 5 && st.n === 0, "開在今天那一組的第 1 題(共 5 題)", JSON.stringify(st));
+ok(st.line.includes("第 1/5 題") && st.line.includes("已走 0 步"), "常駐狀態行帶進度", st.line);
 
 // 白方解題:窮舉「仍在必殺樹上」的那步(chess.js 就在頁面裡,直接借它算)
 const end = await page.evaluate(async () => {
@@ -85,10 +87,24 @@ const end = await page.evaluate(async () => {
     store: localStorage.getItem("3d-chess-co:daily:v1"),
     auto: localStorage.getItem("3d-chess-co:auto-save:v1") };
 });
-ok(end.mated && end.moves <= end.target, `白方 ${end.moves} 步將死(目標 ${end.target})`, JSON.stringify(end));
-ok(end.status.includes("將死") || end.status.includes("新紀錄"), "結算訊息講了將死/新紀錄", end.status);
+ok(end.mated && end.moves <= end.target, `第 1 題白方 ${end.moves} 步將死(目標 ${end.target})`, JSON.stringify(end));
+ok(end.status.includes("將死") && end.status.includes("已解 1/5"), "結算訊息帶今天進度", end.status);
 const rec = JSON.parse(end.store || "{}");
-ok(rec[st.key] === end.moves, "戰績記了今天最少步(" + end.store + ")");
+ok((rec[st.key]?.solved || {})[st.id ?? Object.keys(rec[st.key]?.solved || {})[0]] === end.moves
+  || Object.values(rec[st.key]?.solved || {})[0] === end.moves,
+  "★ 戰績每題分開記(" + end.store + ")");
+ok(!end.auto, "★ 每日模式沒寫自動存檔(棋譜重播式存檔吃不下自訂 FEN)", String(end.auto));
+
+// 第 2 題:再按每日鈕=自動接下一題未解的
+await page.click("#dailyButton");
+await page.waitForTimeout(700);
+const second = await page.evaluate(() => {
+  const s = window.__chess.state;
+  const solved = Object.keys(JSON.parse(localStorage.getItem("3d-chess-co:daily:v1") || "{}")[s.daily.key]?.solved || {});
+  return { n: s.daily.n, solvedCount: solved.length, line: document.querySelector("#dailyLine").textContent };
+});
+ok(second.n === 1 && second.solvedCount === 1, "再按每日鈕=接第 2 題(已解 1 題)", JSON.stringify(second));
+ok(second.line.includes("第 2/5 題"), "狀態行顯示第 2/5 題", second.line);
 ok(errors.length === 0, "整場零 pageerror", errors.join(" | ").slice(0, 200));
 
 await browser.close();
