@@ -248,6 +248,32 @@ button {
     0 0 18px rgba(125, 211, 252, 0.22);
 }
 
+/* 💡 提示要去的那一格:紫色。
+   刻意避開現有四色 —— selected 琥珀、legal 天藍、last-move 綠、check 紅;
+   撞色的話「提示」與「這格我可以走」在畫面上分不出來,提示就白給了。
+   ⚠ 不能只靠顏色(a11y):hint-to 另外壓一顆 💡 上去,色覺不同的孩子也看得出來。 */
+.square.hint-to::before {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -8px 14px rgba(58, 33, 18, 0.22),
+    0 0 0 4px rgba(168, 85, 247, 0.95),
+    0 0 22px rgba(168, 85, 247, 0.4);
+}
+
+/* ⚠ 這顆 💡 是**真的子元素**,不是 .square::after ——
+   ::after 這站已經拿去畫棋格底下的陰影了(見上面 .square::after),
+   覆寫它會把那一格的陰影整個弄不見。 */
+.hint-badge {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 14px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 3;
+  transform: translateZ(12px);
+}
+
 .square.last-move::before {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.35),

@@ -27,6 +27,63 @@ await page.waitForTimeout(900);
 ok(await page.locator("#dailyButton").count() === 1, "有「📅 每日殘局」鈕");
 ok((await page.locator("#verTag").textContent()).includes("一組 5 題"), "verTag 講了一組 5 題");
 
+/* 💡 提示鈕:真的用滑鼠按(不是 evaluate 裡呼叫 showHint)。
+   evaluate-not-click-guard 存在的理由就是這個 —— 繞過真點擊的話,
+   「鈕被別的東西蓋住、按不到」這種病照樣全綠。 */
+ok(await page.locator("#hintButton").count() === 1, "有「💡 提示」鈕");
+await page.click("#hintButton");
+await page.waitForTimeout(600);
+const hintA = await page.evaluate(() => {
+  const s = window.__chess.state;
+  return {
+    hint: s.hint && { from: s.hint.from, to: s.hint.to },
+    selected: s.selectedSquare,
+    status: document.querySelector("#statusText").textContent,
+    purple: document.querySelectorAll(".square.hint-to").length,
+    badge: document.querySelectorAll(".hint-badge").length,
+  };
+});
+ok(Boolean(hintA.hint), "按下去算得出一手", JSON.stringify(hintA));
+ok(hintA.status.includes("建議"), "狀態列講出建議", hintA.status);
+ok(hintA.purple === 1 && hintA.badge === 1,
+  "要去的那一格標成紫色 + 壓一顆 💡(不只靠顏色)",
+  `purple=${hintA.purple} badge=${hintA.badge}`);
+ok(hintA.selected === hintA.hint.from,
+  "順手幫你把那顆棋選起來(接著點紫格就走完)", `${hintA.selected} vs ${hintA.hint.from}`);
+ok(await page.evaluate(() => {                    // 建議的那一手必須是合法著法
+  const s = window.__chess.state;
+  return s.game.moves({ square: s.hint.from, verbose: true }).some((m) => m.to === s.hint.to);
+}), "建議的那一手是合法著法");
+
+await page.click("#hintButton");                  // 同局面再按一次 ⇒ 同一手
+await page.waitForTimeout(400);
+const hintB = await page.evaluate(() => {
+  const h = window.__chess.state.hint;
+  return h.from + h.to;
+});
+ok(hintB === hintA.hint.from + hintA.hint.to,
+  "同一個局面按兩次 ⇒ 同一手(不跳針)", hintA.hint.from + hintA.hint.to + " vs " + hintB);
+
+/* 走一手之後,舊建議必須自己失效(FEN 對不上就不畫)——不是靠逐處補 clearHint。
+   走法用 handleSquareClick(真手指同一條管線),不直接動 game.move。 */
+await page.evaluate(() => {
+  window.__chess.handleSquareClick("e2");
+  window.__chess.handleSquareClick("e4");
+});
+await page.waitForTimeout(600);
+ok(await page.evaluate(() => document.querySelectorAll(".square.hint-to").length) === 0,
+  "★ 局面一變,上一手的提示自己就不見了(比對 FEN,不靠逐處清)");
+
+/* 💡 那一段走了 e2-e4 兩手 ⇒ 自動存檔被寫了一筆。
+   下面「每日模式沒寫自動存檔」那條驗的就是這個鍵,不清掉會拿我自己造的髒資料當紅燈。
+   清完重新載入,讓每日那一段的起點跟沒有提示測試時**一模一樣**。 */
+await page.evaluate(() => {
+  localStorage.removeItem("3d-chess-co:auto-save:v1");
+  localStorage.removeItem("3d-chess-co:daily:v1");
+});
+await page.goto(URL + "/?v=" + Date.now(), { waitUntil: "networkidle" });
+await page.waitForTimeout(700);
+
 await page.evaluate(() => localStorage.removeItem("3d-chess-co:daily:v1"));
 await page.click("#dailyButton");
 await page.waitForTimeout(600);

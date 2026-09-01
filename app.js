@@ -16,6 +16,7 @@ const statusTextElement = document.querySelector("#statusText");
 const installHintElement = document.querySelector("#installHint");
 const installButtonElement = document.querySelector("#installButton");
 const newGameButtonElement = document.querySelector("#newGameButton");
+const hintButtonElement = document.querySelector("#hintButton");
 const undoButtonElement = document.querySelector("#undoButton");
 const prevMoveButtonElement = document.querySelector("#prevMoveButton");
 const nextMoveButtonElement = document.querySelector("#nextMoveButton");
@@ -55,6 +56,10 @@ const state = {
   messageTimeoutId: 0,
   daily: null,          // 📅 每日殘局:null=一般對局;{ key, index, puzzle }=今天這一題
   dailySaved: false,    // 這一局的成績記過了沒(悔棋會解鎖,重殺可再記——取當日最少)
+  /* 💡 AI 提示:{ fen, from, to } —— fen 是算它的時候那個局面。
+     局面沒變就重用同一手,不重算:getBestMove 的同分手順序不保證穩定,
+     每按一次重算會讓建議在幾手之間跳來跳去,看起來像跳針。 */
+  hint: null,
 };
 
 const boardSquares = new Map();
@@ -156,6 +161,78 @@ function clearSelection() {
   state.legalTargets = [];
 }
 
+/* 💡 提示只在「算它的那個局面」上有效。
+   ★ 不去每一個會改動棋盤的地方補一行 clearHint() —— 那種接線方式漏一處就是
+     「提示指著一格早就過期的棋」,而且不會有任何東西報錯(crowd-kit 第五條鐵則
+     講的同一件事:一個錨點,不要逐處補)。這裡改成**用的時候比對 FEN**,
+     結構上不可能過期。 */
+function getActiveHint() {
+  if (!state.hint) return null;
+  return state.hint.fen === state.game.fen() ? state.hint : null;
+}
+
+/* 💡 AI 提示:借的是**同一支** getBestMove —— 提示與對手同源。
+   走法本身來自 chess.js 的 moves(),所以合法性不用另外驗(這一站沒有
+   3D-Xiangqi 那種「簡化版走法產生器」的落差)。
+   文案三態不可混講:有建議 / 這局已經結束 / 真的沒有合法著法。 */
+function showHint() {
+  if (state.aiThinking) return;
+  if (getDisplayPly() !== getHistory().length) {   // 回看歷史時不給(盤上不是當前局面)
+    setMessage("💡 先按「回到最新」,提示只對當前局面有效。");
+    render();
+    return;
+  }
+  if (state.game.isGameOver()) {
+    setMessage("💡 這一局已經結束了。");
+    render();
+    return;
+  }
+  const cached = getActiveHint();
+  if (cached) {                                     // 同局面 ⇒ 同一手,不重算
+    applyHintSelection(cached);
+    return;
+  }
+  const preset = DIFFICULTY_PRESETS[state.difficulty];
+  let best = null;
+  try {
+    best = getBestMove(state.game, preset);
+  } catch (error) {
+    console.error("[hint] getBestMove threw:", error);
+    setMessage("💡 這一手算不出來,先自己走走看。");
+    render();
+    return;
+  }
+  if (!best) {
+    setMessage("💡 找不到可走的棋了。");
+    render();
+    return;
+  }
+  state.hint = { fen: state.game.fen(), from: best.from, to: best.to };
+  applyHintSelection(state.hint);
+}
+
+/* 提示 = 幫你把那顆棋選起來 + 把要去的格子標成紫色。
+   選起來這一步是刻意的:孩子接著只要點那個紫格就走完了,不用自己再找一次那顆棋。 */
+function applyHintSelection(hint) {
+  const moves = state.game.moves({ square: hint.from, verbose: true });
+  state.selectedSquare = hint.from;
+  state.legalTargets = moves.map((move) => move.to);
+  const piece = state.game.get(hint.from);
+  const target = state.game.get(hint.to);
+  const name = piece ? PIECE_NAMES[piece.type] ?? "這顆" : "這顆";
+  setMessage(
+    `💡 建議:${name} ${hint.from} → ${hint.to}`
+      + (target ? `,吃掉對方的${PIECE_NAMES[target.type] ?? "棋"}` : "")
+      + "(紫格就是要去的地方)",
+    5200,
+  );
+  /* ⚠ setMessage 只寫進 state,畫面要等它自己的 timeout 到期才重畫 ——
+     不在這裡叫一次 render(),訊息與紫格**兩樣都不會出現**,
+     而 state 裡看起來一切正常(首跑冒煙就是這樣:hint 算出來了、selected 也對了,
+     畫面上卻什麼都沒有)。 */
+  render();
+}
+
 function cancelAiThink() {
   if (state.aiTimerId) {
     window.clearTimeout(state.aiTimerId);
@@ -186,22 +263,25 @@ function getPieceDisplayMetrics(fileIndex, rank) {
   };
 }
 
+/* 棋子中文名:describeSquare(旁白)與 💡 提示共用同一份。
+   ⚠ 刻意不複製第二份 —— 兩份真相遲早漂移,而漂移的那天畫面上兩處會叫同一顆棋不同名字。 */
+const PIECE_NAMES = {
+  p: "兵",
+  n: "馬",
+  b: "象",
+  r: "車",
+  q: "后",
+  k: "王",
+};
+
 function describeSquare(squareName, piece) {
   if (!piece) {
     return `${squareName} 空格`;
   }
 
   const color = piece.color === "w" ? "白" : "黑";
-  const pieceName = {
-    p: "兵",
-    n: "馬",
-    b: "象",
-    r: "車",
-    q: "后",
-    k: "王",
-  }[piece.type];
 
-  return `${squareName}，${color}${pieceName}`;
+  return `${squareName}，${color}${PIECE_NAMES[piece.type]}`;
 }
 
 function findKingSquare(game, color) {
@@ -325,6 +405,21 @@ function renderBoard() {
       );
       squareButton.classList.toggle("selected", state.selectedSquare === squareName);
       squareButton.classList.toggle("legal", state.legalTargets.includes(squareName));
+      /* 💡 提示只在「還站在最新局面」時畫得出來——回看歷史時盤上是舊局面,
+         把當前局面算出來的建議畫上去等於指錯格子。 */
+      const activeHint = getActiveHint();
+      const isHintTo = Boolean(atLatest && activeHint && activeHint.to === squareName);
+      squareButton.classList.toggle("hint-to", isHintTo);
+      let hintBadge = squareButton.querySelector(".hint-badge");
+      if (isHintTo && !hintBadge) {
+        hintBadge = document.createElement("span");
+        hintBadge.className = "hint-badge";
+        hintBadge.textContent = "💡";
+        hintBadge.setAttribute("aria-hidden", "true");
+        squareButton.append(hintBadge);
+      } else if (!isHintTo && hintBadge) {
+        hintBadge.remove();
+      }
       squareButton.classList.toggle(
         "last-move",
         Boolean(lastMove && (lastMove.from === squareName || lastMove.to === squareName)),
@@ -1147,6 +1242,7 @@ function registerEvents() {
      (Number.isInteger(event) 是 false 所以剛好沒壞——但那是巧合,不留這種接線)。 */
   document.querySelector("#dailyButton")?.addEventListener("click", () => startDailyGame());
   undoButtonElement.addEventListener("click", undoRound);
+  hintButtonElement.addEventListener("click", showHint);
   prevMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() - 1));
   nextMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() + 1));
   latestMoveButtonElement.addEventListener("click", () => goToPly(getHistory().length));
