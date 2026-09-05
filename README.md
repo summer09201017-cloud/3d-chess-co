@@ -56,8 +56,7 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 ## 帳本 / 待補
 
 - 作品集已收、`sites.json` 已登。新功能上線後照 skill `portfolio-ledger-guard` 收尾。
-- 🔴 **統計打點未接**(0903 查:`app.js` / `index.html` 零 `sendBeacon`)= 統計盲區;補法照 3D-Xiangqi `js/app.js` 尾段的三層範本
-  (開啟 / `-done` / `-dwell`),站名用 `3dchesscodex`,並在 hfpc-play-stats 的 `NAMES` 登顯示名。
+- ✅ **統計打點已接(0905)**:`index.html` 三層(開啟 / `-done` / `-dwell`),站名 `3dchesscodex`;`-done` 在 `app.js` 的 `render()` 以 game 物件身分去重(同一局只發一次)。hfpc-play-stats 的 `NAMES` 已登顯示名。
 
 ---
 GitHub:`summer09201017-cloud/3d-chess-co`。本 README 2026-09-03 補(此前文件沒寫網址,作品集對賬只能靠名字猜到本 repo)。

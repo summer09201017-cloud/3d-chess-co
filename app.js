@@ -750,6 +750,11 @@ function renderControls() {
 }
 
 function render() {
+  // 📡 完賽 beacon:對局分出結果(將殺 / 和局)= 一次 -done。用 game 物件身分去重:同一局 render 再多次只發一次;新局(new Chess())自然重置。
+  if (state.game.isGameOver() && state.psDoneFor !== state.game) {
+    state.psDoneFor = state.game;
+    try { if (window.psDone) window.psDone(); } catch (e) { /* 統計是配菜 */ }
+  }
   renderBoard();
   applyBoardView();
   renderStatus();
