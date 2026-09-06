@@ -47,6 +47,9 @@ node scripts/browser-check.mjs
 
 ```bash
 npx wrangler pages deploy . --project-name 3dchesscodex --branch main   # --branch main 必帶,否則進 Preview
+# ⚠ 本 repo 部署要加 PII_OK=1:zero-pii-guard 會咬到 vendor/chess.js 授權標頭的作者 email(開源署名,不是個資)。
+#   而且 commit/push 與 deploy 不可串同一條指令 —— 守門攔的是整條,串在一起 commit 也會一起被擋(2026-09-07 實測)。
+#   PII_OK=1 npx wrangler pages deploy . --project-name 3dchesscodex --branch main --commit-dirty=true
 curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # 要是新版號
 ```
 
