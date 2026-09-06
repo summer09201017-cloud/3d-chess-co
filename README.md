@@ -18,6 +18,13 @@
 - 📅 **每日殘局**:每天一組 5 題 N 步殺,全世界同一組、由易到難,16 題題庫全部經過電腦數學證明(v11 單題 → v12 一組,2026-08-31)。
   ★ 這是棋類每日殘局的**正本之一**,`3D-Chess` 的每日殘局就是從這裡垂直搬運的。
 - 💡 **AI 提示**:借同一支 `getBestMove` 從玩家這邊算一手(2026-09-01,棋類批次 2/5)。
+  ⚡ 2026-09-07 提速(自 3D-Chess 搬來):高手檔中局一手 121s → 0.67s(180x)、標準檔 2.8s → 0.13s(22x)。
+  病根是每個節點重複產生合法著法幾十次:①`orderMoves` 在 sort 比較函式裡對每手 `move()+isCheckmate()+undo()`
+  ②每個葉子 `isGameOver()/isCheckmate()/isDraw()/moves()` 各自重算 ③chess.js 1.x 的 `move()`/verbose `moves()` 每手都 new Move(重算 SAN + 兩次 FEN)。
+  修法:排序分一次算完;終局用「沒棋可走」判;搜尋樹內走 vendored chess.js 的底層 `_moves/_makeMove/_undoMove`
+  (釘死 1.4.0 隨站出貨,少了就自動退回公開 API 路徑);三次重複計數鏡射公開 API。根層視窗收到「最佳−容忍度−1」,候選桶不變。
+  ★ 差分測試(舊 vs 新,easy/medium 各 18 局面 + hard 抽測):根層每一手分數逐一相同 —— 只是快,不是變弱。
+  提示按下先畫「💡 想一下…」、下一個 tick 才算(app.js showHint);browser-check 等 `state.hint` 出現而不賭毫秒。
 - 對 AI 三檔、棋譜回放、存讀檔、📱 安裝 APP(PWA)。
 
 ## 檔案
@@ -29,7 +36,7 @@
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v19"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v20"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` | `npm test`:每日殘局資料檢查 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |

@@ -32,7 +32,9 @@ ok((await page.locator("#verTag").textContent()).includes("一組 5 題"), "verT
    「鈕被別的東西蓋住、按不到」這種病照樣全綠。 */
 ok(await page.locator("#hintButton").count() === 1, "有「💡 提示」鈕");
 await page.click("#hintButton");
-await page.waitForTimeout(600);
+// 提示現在是「先畫『想一下…』、下一個 tick 才算」,等它真的算出來,不賭固定毫秒(慢機器會假紅)
+await page.waitForFunction(() => Boolean(window.__chess.state.hint), null, { timeout: 30000 });
+await page.waitForTimeout(150);
 const hintA = await page.evaluate(() => {
   const s = window.__chess.state;
   return {

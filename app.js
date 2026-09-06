@@ -60,6 +60,7 @@ const state = {
      局面沒變就重用同一手,不重算:getBestMove 的同分手順序不保證穩定,
      每按一次重算會讓建議在幾手之間跳來跳去,看起來像跳針。 */
   hint: null,
+  hintBusy: false,          // 提示正在算(先畫「想一下…」、下一個 tick 才算的那個空檔),防連按算兩次
 };
 
 const boardSquares = new Map();
@@ -204,23 +205,36 @@ function showHint() {
     applyHintSelection(cached);
     return;
   }
+  if (state.hintBusy) return;                       // 已經在算了
+
+  /* getBestMove 是同步的:直接呼叫會先把畫面卡住、算完才一起畫,使用者看到的是「按了沒反應」
+     (3D-Chess 那站 2026-09-07 被使用者抓到「AI 要想很久」,同一套修法搬過來)。
+     ai.js 提速後高手檔中局約 0.7 秒,仍先把「想一下…」畫出來(rAF → 下一個 tick)再開始算。 */
   const preset = DIFFICULTY_PRESETS[state.difficulty];
-  let best = null;
-  try {
-    best = getBestMove(state.game, preset);
-  } catch (error) {
-    console.error("[hint] getBestMove threw:", error);
-    setMessage("💡 這一手算不出來,先自己走走看。");
-    render();
-    return;
-  }
-  if (!best) {
-    setMessage("💡 找不到可走的棋了。");
-    render();
-    return;
-  }
-  state.hint = { fen: state.game.fen(), from: best.from, to: best.to };
-  applyHintSelection(state.hint);
+  const fen = state.game.fen();
+  state.hintBusy = true;
+  setMessage("💡 想一下…", 30000);
+  render();
+  window.requestAnimationFrame(() => window.setTimeout(() => {
+    state.hintBusy = false;
+    if (state.aiThinking || isViewingHistory() || state.game.fen() !== fen) return;   // 等的那一瞬局面變了,作廢
+    let best = null;
+    try {
+      best = getBestMove(state.game, preset);
+    } catch (error) {
+      console.error("[hint] getBestMove threw:", error);
+      setMessage("💡 這一手算不出來,先自己走走看。");
+      render();
+      return;
+    }
+    if (!best) {
+      setMessage("💡 找不到可走的棋了。");
+      render();
+      return;
+    }
+    state.hint = { fen, from: best.from, to: best.to };
+    applyHintSelection(state.hint);
+  }, 0));
 }
 
 /* 提示 = 幫你把那顆棋選起來 + 把要去的格子標成紫色。
