@@ -19,7 +19,23 @@
     <link rel="apple-touch-icon" href="./assets/icon-192.png">
     <link rel="stylesheet" href="./styles.css">
     <title>3D西洋棋 CO</title>
-  </head>
+  <style id="mfsZoomStyle">
+/* mfs-portrait-zoom v1 —— 勿手改;要改請改 skills/force-landscape-pwa/patches/add-portrait-zoom.mjs 後重打 */
+#mfsFull{display:none}
+@media (pointer:coarse){
+  /* 只在觸控裝置、且還沒進全螢幕時出現;進了就自己藏 ⇒ 玩的時候不壓到棋盤/HUD。桌機不顯示(按 F11) */
+  body:not(.mfs-fs) #mfsFull{position:fixed;display:flex;align-items:center;justify-content:center;
+    top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));
+    z-index:2147482000;width:42px;height:42px;padding:0;border-radius:11px;
+    border:1px solid rgba(255,255,255,.42);background:rgba(9,15,19,.55);color:#fff;
+    cursor:pointer;opacity:.55;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  body:not(.mfs-fs) #mfsFull:hover,body:not(.mfs-fs) #mfsFull:focus-visible{opacity:1}
+}
+
+body.immersive :is(.hero-card){display:none!important}
+body.immersive .layout{width:100%} body.immersive .board{width:min(100%,900px)}
+</style>
+</head>
   <body>
     <div class="app-shell">
       <header class="hero-card">
@@ -57,7 +73,7 @@
           <div class="status-card">
             <p id="dailyLine" class="status-text" hidden style="font-weight:700"></p>
             <p id="statusText" class="status-text">準備開局，白方先手。</p>
-            <p id="verTag" class="status-text" style="font-size:12px;opacity:.72;line-height:1.6">版本 v17(2026-09-07)・🎨 <b>棋子全部重畫</b>——原本用色塊拼的「剪紙棋子」換成真正的西洋棋造型(球頭兵、城垛車、馬頭、主教冠、皇后冠、國王十字),加上車床般的圓柱陰影與頂面高光,高矮分級一眼看出誰是誰。前幾版:v16 📱 手機直向棋盤不再超出螢幕(以前頁面會多 3px 左右晃動、最右一列格子邊緣被切;艦隊 131 站手機掃描唯一紅燈)(2026-09-06)・v15 🔗 網址加 ?daily 直接開每日殘局(信友火花「今日挑戰」卡點了就進今天的題)(2026-09-06)・v14 📡 接上使用統計(開啟/完局/停留)(2026-09-05)・v13 💡 AI 提示:電腦幫你算一手(2026-09-01)・v12 📅 每日殘局升級成每天一組 5 題(全世界同一組、由易到難、N 步殺全部經電腦證明、每題分開記最少步數)(2026-08-31)・v11 每日殘局(單題)・v10 3D 西洋棋(對 AI 三檔/棋譜回放/存讀檔/PWA)</p>
+            <p id="verTag" class="status-text" style="font-size:12px;opacity:.72;line-height:1.6">版本 v18(2026-09-07)・⛶ <b>手機放大鈕</b>——右上角一顆放大鈕:收掉上方標題卡、棋盤放到滿寬;Android 會連瀏覽器網址列一起收掉,iPhone 不支援網頁全螢幕也照樣放得大;再按一次縮回。前幾版:v17 🎨 棋子全部重畫——原本用色塊拼的「剪紙棋子」換成真正的西洋棋造型(球頭兵、城垛車、馬頭、主教冠、皇后冠、國王十字),加上車床般的圓柱陰影與頂面高光,高矮分級一眼看出誰是誰(2026-09-07)・v16 📱 手機直向棋盤不再超出螢幕(以前頁面會多 3px 左右晃動、最右一列格子邊緣被切;艦隊 131 站手機掃描唯一紅燈)(2026-09-06)・v15 🔗 網址加 ?daily 直接開每日殘局(信友火花「今日挑戰」卡點了就進今天的題)(2026-09-06)・v14 📡 接上使用統計(開啟/完局/停留)(2026-09-05)・v13 💡 AI 提示:電腦幫你算一手(2026-09-01)・v12 📅 每日殘局升級成每天一組 5 題(全世界同一組、由易到難、N 步殺全部經電腦證明、每題分開記最少步數)(2026-08-31)・v11 每日殘局(單題)・v10 3D 西洋棋(對 AI 三檔/棋譜回放/存讀檔/PWA)</p>
             <p id="installHint" class="install-hint"></p>
           </div>
         </section>
@@ -190,5 +206,51 @@
       })()
     </script>
     <script type="module" src="./app.js"></script>
-  </body>
+  <!-- mfs-portrait-zoom v1 -->
+<button type="button" id="mfsFull" title="放大(全螢幕)" aria-label="放大(全螢幕)" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<script>
+/* mfs-portrait-zoom v1 */
+(function () {
+  try {
+    if (window.self !== window.top) { var f0 = document.getElementById('mfsFull'); if (f0) f0.remove(); return; } /* 嵌入時不搶宿主 */
+    var targetSel = "";
+    var fsEl = function () { return (targetSel && document.querySelector(targetSel)) || document.documentElement; };
+    var isFs = function () { return !!(document.fullscreenElement || document.webkitFullscreenElement); };
+    var immersive = false;
+    var btn = document.getElementById('mfsFull');
+    
+    function refit() {
+      /* Three.js / canvas 遊戲多半聽 resize 重算;版面剛變、要等一幀再發,不然量到舊尺寸 */
+      requestAnimationFrame(function () { try { window.dispatchEvent(new Event('resize')); } catch (e) {} });
+    }
+    function paint() {
+      try {
+        document.body.classList.toggle('immersive', immersive);
+        document.body.classList.toggle('mfs-fs', isFs());
+        if (btn) { btn.setAttribute('aria-pressed', String(immersive)); var s = btn.querySelector('span'); if (s) s.textContent = immersive ? '縮小' : '放大'; }
+      } catch (e) {}
+      refit();
+    }
+    function toggle() {
+      immersive = !immersive;
+      try {
+        var el = fsEl();
+        var req = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen;
+        var out = document.exitFullscreen || document.webkitExitFullscreen;
+        if (immersive && req && !isFs()) { var p = req.call(el); if (p && p.catch) p.catch(function () {}); }
+        else if (!immersive && isFs() && out) { var q = out.call(document); if (q && q.catch) q.catch(function () {}); }
+      } catch (e) { /* iOS Safari 不支援網頁全螢幕:只吃 immersive 樣式,不能炸遊戲 */ }
+      paint();
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    /* 使用者按 Esc / 系統手勢退出全螢幕 ⇒ 沉浸樣式也收;只在支援全螢幕的裝置跟隨(iPhone 沒這事件,跟隨會誤關) */
+    var supports = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+    if (supports) ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {
+      document.addEventListener(ev, function () { if (!isFs() && immersive) { immersive = false; } paint(); });
+    });
+    paint();
+  } catch (e) {}
+})();
+</script>
+</body>
 </html>
