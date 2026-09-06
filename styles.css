@@ -1035,8 +1035,16 @@ select {
     border-radius: 24px;
   }
 
+  /* v16(2026-09-06 艦隊手機溢出掃描 131 站唯一紅燈):iPhone 390 寬時整頁多 3px 橫向捲動。
+     兩個原因:① .board 寫 100vw - 20px 沒扣 .scene-wrap 的 padding/border ⇒ 把 .scene-wrap 撐到 388px,超出 380px 的 .app-shell;
+     ② 1500px 透視下 52° 的棋盤近端投影比本體寬 11%(370px ⇒ 413px),最右一列方格右緣落在 393。
+     修法:寬度跟容器走(100%),手機把透視放遠(近端只放大 5%,380px 內放得下),外觀仍是斜看的 3D 棋盤。 */
+  .board-scene {
+    perspective: 3000px;
+  }
+
   .board {
-    width: min(100vw - 20px, 760px);
+    width: min(100%, 760px);
     padding: 6px;
     gap: 2px;
     border-radius: 24px;
