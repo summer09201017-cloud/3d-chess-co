@@ -72,6 +72,18 @@ function normalizeRotation(value) {
   return ((value % 360) + 360) % 360;
 }
 
+/* CSS 吃的水平角度要「連續」:state 存的是 0~359 正規化值,315°+45° 會變成 0°,
+   .board 的 180ms transition 就會反方向繞 315° 一大圈。這裡挑「離上一次最近」的等價角
+   (允許 >360 或 <0),transition 才會走短邊。只影響 CSS 變數,不影響 state/存檔。 */
+let cssRotation = DEFAULT_CAMERA_ROTATION;
+function continuousRotation(target) {
+  let r = target;
+  while (r - cssRotation > 180) r -= 360;
+  while (r - cssRotation < -180) r += 360;
+  cssRotation = r;
+  return r;
+}
+
 function applyBoardView() {
   const effectiveTilt = state.boardMode === "3d" ? clamp(state.cameraTilt, 20, 76) : 0;
   const normalizedRotation = normalizeRotation(state.cameraRotation);
@@ -80,7 +92,7 @@ function applyBoardView() {
   boardElement.classList.toggle("two-d", state.boardMode === "2d");
   boardSceneElement.classList.toggle("is-dragging", Boolean(state.dragState));
   boardElement.style.setProperty("--board-rotate-x", `${effectiveTilt}deg`);
-  boardElement.style.setProperty("--board-rotate-z", `${normalizedRotation}deg`);
+  boardElement.style.setProperty("--board-rotate-z", `${continuousRotation(normalizedRotation)}deg`);
 }
 
 function syncViewControls() {
@@ -259,7 +271,7 @@ function getPieceDisplayMetrics(fileIndex, rank) {
   return {
     heightScale: 1,      // v17:棋子是 SVG 了,不再靠 scaleY 拉高(拉了圓頭會變蛋);高度改由 .piece 的 height 控
     sizeScale: 1,
-    lift: 36,
+    lift: 10,            // v19:格面在 translateZ(8px),棋子腳放 10px 剛好「站在」格面上;以前 36px 是整顆浮在半空(使用者:「棋子浮在棋盤上」)
   };
 }
 
@@ -1213,10 +1225,12 @@ function handleBoardPointerMove(event) {
     state.suppressSquareClick = true;
   }
 
+  /* 拖曳靈敏度(2026-09-07 使用者拍板「轉太快」):原本 0.65°/px,橫拖半個棋盤就轉了半圈;
+     現在 0.25°/px ⇒ 拖過整個 720px 棋盤約轉半圈(180°),俯仰 0.08°/px ⇒ 拖滿 700px 才走完 20°~76° 全程。 */
   updateBoardView({
-    cameraRotation: state.dragState.startRotation + deltaX * 0.65,
+    cameraRotation: state.dragState.startRotation + deltaX * 0.25,
     cameraTilt: state.boardMode === "3d"
-      ? state.dragState.startTilt - deltaY * 0.18
+      ? state.dragState.startTilt - deltaY * 0.08
       : state.cameraTilt,
   });
 }

@@ -29,7 +29,7 @@
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v17"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v19"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` | `npm test`:每日殘局資料檢查 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |

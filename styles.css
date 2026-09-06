@@ -305,8 +305,10 @@ button {
   top: 50%;
   width: 82%;
   height: 165%;   /* v17:SVG 不再 scaleY 拉伸,高度直接給(舊 138%×1.34≈185% 太巨大) */
+  /* v19:腳(.piece-core 的 transform-origin=底邊中點)對準格子正中央(-100%),以前 -84% 偏向近端 16%,
+     棋盤一轉 180° 整排棋子就跑到格子另一側。 */
   transform:
-    translate(-50%, -84%)
+    translate(-50%, -100%)
     translateZ(var(--piece-lift))
     scale(var(--piece-size-scale));
   transform-style: preserve-3d;
@@ -337,7 +339,7 @@ button {
 .piece-shadow {
   position: absolute;
   left: 50%;
-  bottom: -1%;
+  bottom: -8%;    /* 橢圓中心=腳的位置 */
   width: 82%;
   height: 16%;
   border-radius: 999px;
@@ -345,7 +347,7 @@ button {
   filter: blur(7px);
   transform:
     translateX(-50%)
-    translateZ(-10px)
+    translateZ(-1px)    /* 腳在 lift=10px,影子壓在 9px:剛好貼在 8px 的格面上、不會被格面吃掉 */
     rotateZ(-10deg)
     scaleX(1.12);
 }
@@ -366,14 +368,27 @@ button {
     scaleX(1.1);
 }
 
+/* ★ 棋子是「永遠正面朝向你」的立牌(billboard)。棋盤的 transform 是 rotateX(rx) rotateZ(rz),
+   立牌要完整反解:rotateZ(-rz) rotateX(-rx)(順序不能反)。以前只反解了 rotateX,
+   棋盤水平一轉,立牌跟著側過去 ⇒ 90° 時只剩一條線(「消失」)、其他角度像紙片(2026-09-07 使用者退件)。
+   transform-origin 在底邊中點 ⇒ 繞著「腳」自轉,腳始終釘在格子中央。
+   轉盤/俯仰用按鈕或滑桿時 .board 有 180ms transition,立牌要同步跟著轉,否則那 180ms 會先側身再回正。 */
 .piece-core {
   position: absolute;
   inset: 0;
   transform-origin: 50% 100%;
   transform-style: preserve-3d;
   transform:
+    rotateZ(calc(-1 * var(--board-rotate-z)))
     rotateX(calc(-1 * var(--board-rotate-x)))
     scaleY(var(--piece-height-scale));
+  transition: transform 180ms ease;
+}
+
+/* 拖曳中一律關掉 transition:手在動,畫面要 1:1 跟手,不然像在拖橡皮筋 */
+.board-scene.is-dragging .board,
+.board-scene.is-dragging .piece-core {
+  transition: none;
 }
 
 /* ══════════ 🎨 棋子 SVG Staunton 造型(2026-09-07,v17)══════════
@@ -384,9 +399,9 @@ button {
 .piece-svg {
   position: absolute;
   left: 50%;
-  bottom: 4%;
+  bottom: 0;      /* 底座貼齊 .piece-core 底邊=腳=格子中央 */
   width: 100%;
-  height: 96%;
+  height: 100%;
   transform: translateX(-50%);
   overflow: visible;
   filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.55));
@@ -416,7 +431,7 @@ button {
 .square.legal .piece,
 .square.selected .piece {
   transform:
-    translate(-50%, -88%)
+    translate(-50%, -100%)
     translateZ(calc(var(--piece-lift) + 6px))
     scale(calc(var(--piece-size-scale) * 1.01));
 }
@@ -445,7 +460,7 @@ button {
   opacity: 0.65;
   transform:
     translateX(-50%)
-    translateZ(-2px)
+    translateZ(-1px)    /* 2D 格面在 2px、lift×0.38=3.8px,影子 2.8px 才看得到 */
     rotateZ(-8deg)
     scaleX(1.04);
 }
