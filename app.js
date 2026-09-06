@@ -291,13 +291,15 @@ function getPieceDisplayMetrics(fileIndex, rank) {
 
 /* 棋子中文名:describeSquare(旁白)與 💡 提示共用同一份。
    ⚠ 刻意不複製第二份 —— 兩份真相遲早漂移,而漂移的那天畫面上兩處會叫同一顆棋不同名字。 */
+/* 2026-09-07 使用者拍板:西洋棋就用西洋棋的叫法(主教/城堡/騎士/皇后/國王),和 3D 幻影西洋棋(3dchess-an)一致;
+   象/車/馬/后/王是象棋味,孩子對著 Staunton 造型的主教聽到「象」會對不上。 */
 const PIECE_NAMES = {
   p: "兵",
-  n: "馬",
-  b: "象",
-  r: "車",
-  q: "后",
-  k: "王",
+  n: "騎士",
+  b: "主教",
+  r: "城堡",
+  q: "皇后",
+  k: "國王",
 };
 
 function describeSquare(squareName, piece) {
