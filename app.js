@@ -302,6 +302,22 @@ const PIECE_NAMES = {
   k: "國王",
 };
 
+/* 🏷️ 棋子頭上的名牌(v22;文字直接讀上面的 PIECE_NAMES,三處永遠同名)。畫在同一張 SVG 裡 ⇒ 跟棋子一起縮放、一起當立牌永遠正面朝向。
+   每型棋子本體的最高點(PIECE_SVG 座標):牌底留 8 的空隙,牌高 30,下緣一個小尖角指著自己。
+   ★ 馬是 CSS scaleX(-1) 鏡射的 —— 名牌不在被鏡射的 <g class="body"> 裡,字才不會反過來。 */
+const PIECE_TOP_Y = { p: 73, r: 64, n: 45, b: 45, q: 41, k: 30 };
+function pieceNameTag(type) {
+  const label = PIECE_NAMES[type] || "";
+  if (!label) return "";
+  const w = label.length > 1 ? 72 : 44;
+  const x0 = 50 - w / 2, x1 = 50 + w / 2;
+  const y1 = (PIECE_TOP_Y[type] || 40) - 8, y0 = y1 - 30;
+  const d = `M${x0 + 8} ${y0} H${x1 - 8} Q${x1} ${y0} ${x1} ${y0 + 8} V${y1 - 8} Q${x1} ${y1} ${x1 - 8} ${y1} ` +
+            `H56 L50 ${y1 + 7} L44 ${y1} H${x0 + 8} Q${x0} ${y1} ${x0} ${y1 - 8} V${y0 + 8} Q${x0} ${y0} ${x0 + 8} ${y0} Z`;
+  return `<g class="nm"><path class="nmp" d="${d}"/>` +
+         `<text class="nmt" x="50" y="${y0 + 15.5}" text-anchor="middle" dominant-baseline="central">${label}</text></g>`;
+}
+
 function describeSquare(squareName, piece) {
   if (!piece) {
     return `${squareName} 空格`;
@@ -420,7 +436,7 @@ function createPieceElement(piece, fileIndex, rank) {
   // 🎨 v17:棋子本體=一張 SVG(見 PIECE_SVG)。xMidYMax ⇒ 底座貼在 .piece-core 底部,高矮不同的棋子腳都在同一條線上。
   pieceCore.innerHTML =
     `<svg class="piece-svg pc-${piece.color}" viewBox="0 0 100 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false">` +
-    PIECE_SVG_BASE + (PIECE_SVG[piece.type] || "") + "</svg>";
+    `<g class="body">${PIECE_SVG_BASE}${PIECE_SVG[piece.type] || ""}</g>` + pieceNameTag(piece.type) + "</svg>";
   pieceElement.append(pieceShadow, pieceCore);
   return pieceElement;
 }
@@ -1244,9 +1260,12 @@ function handleBoardPointerMove(event) {
   /* 拖曳靈敏度(2026-09-07 使用者拍板「轉太快」):原本 0.65°/px,橫拖半個棋盤就轉了半圈;
      現在 0.25°/px ⇒ 拖過整個 720px 棋盤約轉半圈(180°),俯仰 0.08°/px ⇒ 拖滿 700px 才走完 20°~76° 全程。 */
   updateBoardView({
-    cameraRotation: state.dragState.startRotation + deltaX * 0.25,
+    /* v21 使用者再退件:「還是太快、太靈敏;滑鼠往右棋盤往左轉是反的」。
+       ① 0.25 → 0.12°/px(拖過整個 720px 棋盤約 86°,不到四分之一圈);俯仰 0.08 → 0.05。
+       ② 方向取負:抓著近端棋盤邊往右拖,近端就往右走(像用手撥轉盤),不是鏡頭繞著棋盤走。 */
+    cameraRotation: state.dragState.startRotation - deltaX * 0.12,
     cameraTilt: state.boardMode === "3d"
-      ? state.dragState.startTilt - deltaY * 0.08
+      ? state.dragState.startTilt - deltaY * 0.05
       : state.cameraTilt,
   });
 }
@@ -1345,6 +1364,26 @@ function registerEvents() {
   document.querySelector("#dailyButton")?.addEventListener("click", () => startDailyGame());
   undoButtonElement.addEventListener("click", undoRound);
   hintButtonElement.addEventListener("click", showHint);
+
+  // 🏷️ 棋名牌開關(v21):預設開(看不懂棋子長相是新手最大的卡點),關掉記在 localStorage。
+  //    狀態寫在鈕的文字上(開/關),不靠 title —— 手機沒有 hover。
+  const PIECE_NAMES_KEY = "3d-chess-co.pieceNames";
+  const pieceNamesButtonElement = document.querySelector("#pieceNamesButton");
+  if (pieceNamesButtonElement) {
+    let namesOn = true;
+    try { namesOn = localStorage.getItem(PIECE_NAMES_KEY) !== "0"; } catch { /* 私密模式照玩 */ }
+    const paintNames = () => {
+      boardElement.classList.toggle("hide-names", !namesOn);
+      pieceNamesButtonElement.textContent = namesOn ? "🏷️ 棋名:開" : "🏷️ 棋名:關";
+      pieceNamesButtonElement.setAttribute("aria-pressed", namesOn ? "true" : "false");
+    };
+    pieceNamesButtonElement.addEventListener("click", () => {
+      namesOn = !namesOn;
+      try { localStorage.setItem(PIECE_NAMES_KEY, namesOn ? "1" : "0"); } catch { /* 私密模式照玩 */ }
+      paintNames();
+    });
+    paintNames();
+  }
   prevMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() - 1));
   nextMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() + 1));
   latestMoveButtonElement.addEventListener("click", () => goToPly(getHistory().length));

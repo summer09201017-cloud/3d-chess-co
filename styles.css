@@ -408,9 +408,22 @@ button {
   backface-visibility: hidden;
 }
 
-.piece.piece-face-left .piece-svg {
-  transform: translateX(-50%) scaleX(-1);
+/* 朝左的馬:只鏡射本體 <g class="body">,名牌不跟著翻(字會反) */
+.piece.piece-face-left .piece-svg .body {
+  transform: scaleX(-1);
+  transform-origin: 50% 50%;
 }
+
+/* 🏷️ 棋子頭上的名牌(v21;幾何在 app.js pieceNameTag):牌面=該方棋子色系,順便看得出黑白 */
+.pc-w .nmp { fill: #fbf4e6; stroke: #6b563a; stroke-width: 2; }
+.pc-b .nmp { fill: #23252f; stroke: #7d95b8; stroke-width: 2; }
+.pc-w .nmt { fill: #1a1a2e; }
+.pc-b .nmt { fill: #f4f1e8; }
+.nmt {
+  font: 700 21px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+  pointer-events: none;
+}
+.board.hide-names .nm { display: none; }
 
 .pc-w .b { fill: url(#pgw); stroke: #6b563a; }
 .pc-b .b { fill: url(#pgb); stroke: #01050c; }
