@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "serve": "py -m http.server 4174",
-    "test": "node test/daily.mjs"
+    "test": "node test/daily.mjs && node test/ai.mjs"
   },
   "dependencies": {
     "chess.js": "^1.4.0"

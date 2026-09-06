@@ -1,5 +1,5 @@
 import { Chess } from "./vendor/chess.js";
-import { DIFFICULTY_PRESETS, getBestMove } from "./ai.js";
+import { DIFFICULTY_PRESETS, getBestMove, getHintMove } from "./ai.js";
 import { dailyPuzzleKey, puzzlesForDate } from "./puzzles.js";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -210,7 +210,6 @@ function showHint() {
   /* getBestMove 是同步的:直接呼叫會先把畫面卡住、算完才一起畫,使用者看到的是「按了沒反應」
      (3D-Chess 那站 2026-09-07 被使用者抓到「AI 要想很久」,同一套修法搬過來)。
      ai.js 提速後高手檔中局約 0.7 秒,仍先把「想一下…」畫出來(rAF → 下一個 tick)再開始算。 */
-  const preset = DIFFICULTY_PRESETS[state.difficulty];
   const fen = state.game.fen();
   state.hintBusy = true;
   setMessage("💡 想一下…", 30000);
@@ -220,9 +219,11 @@ function showHint() {
     if (state.aiThinking || isViewingHistory() || state.game.fen() !== fen) return;   // 等的那一瞬局面變了,作廢
     let best = null;
     try {
-      best = getBestMove(state.game, preset);
+      /* v24:提示走專用的 getHintMove —— 固定高手深度、零隨機、吃子要比安靜手多賺半個兵才建議
+         (以前借「當前難度」的隨機候選桶:選輕鬆時提示=深度 1+52% 隨機;而且同分偏好吃子 ⇒ 常叫人做等價交換)。 */
+      best = getHintMove(state.game);
     } catch (error) {
-      console.error("[hint] getBestMove threw:", error);
+      console.error("[hint] getHintMove threw:", error);
       setMessage("💡 這一手算不出來,先自己走走看。");
       render();
       return;
@@ -232,7 +233,17 @@ function showHint() {
       render();
       return;
     }
-    state.hint = { fen, from: best.from, to: best.to };
+    /* 對方吃得回來嗎?走一步看對方有沒有落在同一格的吃子,再退回 —— 文案要把「白吃」和
+       「會被回吃但整體划算」講清楚,孩子才知道接下來會發生什麼。 */
+    let recap = false;
+    if (best.captured) {
+      try {
+        state.game.move({ from: best.from, to: best.to, promotion: best.promotion ?? "q" });
+        recap = state.game.moves({ verbose: true }).some((m) => m.to === best.to && m.captured);
+        state.game.undo();
+      } catch { recap = false; }
+    }
+    state.hint = { fen, from: best.from, to: best.to, recap };
     applyHintSelection(state.hint);
   }, 0));
 }
@@ -248,7 +259,7 @@ function applyHintSelection(hint) {
   const name = piece ? PIECE_NAMES[piece.type] ?? "這顆" : "這顆";
   setMessage(
     `💡 建議:${name} ${hint.from} → ${hint.to}`
-      + (target ? `,吃掉對方的${PIECE_NAMES[target.type] ?? "棋"}` : "")
+      + (target ? `,吃掉對方的${PIECE_NAMES[target.type] ?? "棋"}` + (hint.recap ? "(對方會回吃,但這筆交換划算)" : "(白吃,對方吃不回來)") : "")
       + "(紫格就是要去的地方)",
     5200,
   );

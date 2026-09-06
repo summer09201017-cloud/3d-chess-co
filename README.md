@@ -17,7 +17,7 @@
 
 - 📅 **每日殘局**:每天一組 5 題 N 步殺,全世界同一組、由易到難,16 題題庫全部經過電腦數學證明(v11 單題 → v12 一組,2026-08-31)。
   ★ 這是棋類每日殘局的**正本之一**,`3D-Chess` 的每日殘局就是從這裡垂直搬運的。
-- 💡 **AI 提示**:借同一支 `getBestMove` 從玩家這邊算一手(2026-09-01,棋類批次 2/5)。
+- 💡 **AI 提示**:借同一支 `getBestMove` 從玩家這邊算一手(2026-09-01,棋類批次 2/5)。 **2026-09-07 v24 提示品質**(自 3D-Chess v9 搬來):使用者退件「提示叫我吃、吃完被吃回=等價交換」。病因 ①提示借「當前難度」的隨機候選桶(輕鬆=深度 1+52% 隨機);②同分偏好吃子;③depth 3 奇數層 horizon。修法:`ai.js` 葉子前一層吃子/升變用 SEE(swap-list、含 x-ray、直接算在 0x88 `_board` 上,O(1))扣掉「算到底後少賺的」;提示改走 `getHintMove()`:固定高手深度、零隨機、兩段式(先安靜手,吃子要多賺 `HINT_TRADE_MARGIN`=50 才建議);AI 對手仍走 `getBestMove`。測試 `test/ai.mjs`(手工陷阱局面 + 30 隨機中局用獨立裁判驗「不虧、不等價」+ 耗時 <3s)。
   ⚡ 2026-09-07 提速(自 3D-Chess 搬來):高手檔中局一手 121s → 0.67s(180x)、標準檔 2.8s → 0.13s(22x)。
   病根是每個節點重複產生合法著法幾十次:①`orderMoves` 在 sort 比較函式裡對每手 `move()+isCheckmate()+undo()`
   ②每個葉子 `isGameOver()/isCheckmate()/isDraw()/moves()` 各自重算 ③chess.js 1.x 的 `move()`/verbose `moves()` 每手都 new Move(重算 SAN + 兩次 FEN)。
@@ -36,7 +36,7 @@
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v23"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步)) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v24"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` | `npm test`:每日殘局資料檢查 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |
