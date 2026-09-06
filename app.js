@@ -257,7 +257,7 @@ function squareColor(fileIndex, rank) {
 
 function getPieceDisplayMetrics(fileIndex, rank) {
   return {
-    heightScale: 1.34,
+    heightScale: 1,      // v17:棋子是 SVG 了,不再靠 scaleY 拉高(拉了圓頭會變蛋);高度改由 .piece 的 height 控
     sizeScale: 1,
     lift: 36,
   };
@@ -298,10 +298,81 @@ function findKingSquare(game, color) {
   return "";
 }
 
+/* 馬頭朝向:兩邊的馬都面向棋盤中央(a~d 線朝右、e~h 線朝左);SVG 預設朝右,朝左靠 CSS scaleX(-1)。 */
 function getKnightFacingClass(piece, fileIndex) {
   return piece.type === "n"
-    ? (fileIndex < 4 ? "piece-left-facing" : "piece-right-facing")
+    ? (fileIndex < 4 ? "piece-face-right" : "piece-face-left")
     : "";
+}
+
+/* ══════════ 🎨 棋子 SVG(2026-09-07,v17)══════════
+   舊版用四個 <span> + clip-path 多邊形拼棋子,看起來像剪紙,使用者拍板「畫得很醜,重畫」。
+   現在每顆棋子是一張 inline SVG:真正的 Staunton 輪廓(球頭兵/城垛車/馬頭/主教冠/后冠/王十字),
+   左→右漸層做「車床轉出來」的圓柱陰影,每個環節再畫一個頂面橢圓(假裝從上方看)。
+   viewBox 100×170,所有棋子共用同一個底座(y 141~168),本體從 y=142 往上長;
+   高度刻意分級:王 30 < 后 41 < 象/馬 45 < 車 64 < 兵 73(y 越小越高),一眼分得出誰大誰小。
+   ★ 顏色不寫在 SVG 裡:根節點掛 .pc-w / .pc-b,填色規則在 styles.css。inline SVG 的 <style>
+     是整份文件生效,32 顆會互相蓋掉(草稿時白棋全變藍的教訓)。
+   ★ 漸層 <defs> 只放一份(#pieceDefs,ensurePieceDefs 注入 body),32 顆共用 url(#pgw) 等 id。 */
+const PIECE_SVG_BASE =
+  '<path class="b" d="M14 152 v10 a6 6 0 0 0 6 6 h60 a6 6 0 0 0 6 -6 v-10z"/>' +
+  '<ellipse class="t" cx="50" cy="152" rx="36" ry="6.5"/>' +
+  '<path class="b" d="M23 141 v10 h54 v-10z"/>' +
+  '<ellipse class="t" cx="50" cy="141" rx="27" ry="5"/>';
+
+const PIECE_SVG = {
+  p:
+    '<path class="b" d="M36 142 C37 126 40 116 40 108 h20 c0 8 3 18 4 34z"/>' +
+    '<ellipse class="b" cx="50" cy="108" rx="15" ry="4.5"/><ellipse class="t" cx="50" cy="106.5" rx="15" ry="3.6"/>' +
+    '<circle class="b" cx="50" cy="90" r="17"/>',
+  r:
+    '<path class="b" d="M34 142 C35 128 37 112 37 96 h26 c0 16 2 32 3 46z"/>' +
+    '<path class="b" d="M29 90 v6 h42 v-6z"/><ellipse class="b" cx="50" cy="96" rx="21" ry="4.5"/><ellipse class="t" cx="50" cy="90" rx="21" ry="4.5"/>' +
+    '<path class="b" d="M30 90 V66 h9 v9 h7 v-9 h8 v9 h7 v-9 h9 v24z"/>' +
+    '<path class="t" d="M30 64 h9 v4 h-9z M46 64 h8 v4 h-8z M61 64 h9 v4 h-9z"/>',
+  n:
+    '<path class="b" d="M34 142 C35 134 37 126 40 118 L64 118 C66 126 66 134 66 142z"/>' +
+    '<path class="b" d="M40 120 C34 108 28 96 32 80 C35 68 42 61 48 57 L46 47 L54 55 L59 45 L61 57 C68 61 76 68 81 76 C86 82 86 88 82 92 C79 96 73 96 69 94 C66 100 62 106 62 112 L64 120z"/>' +
+    '<path class="m" d="M34 80 C40 76 44 72 48 66 C50 72 46 78 40 86 C38 90 36 94 36 98z"/>' +
+    '<circle class="e" cx="63" cy="67" r="2.7"/><circle class="e" cx="79" cy="84" r="1.6"/>',
+  b:
+    '<path class="b" d="M35 142 C37 126 40 114 42 108 h16 c2 6 5 18 7 34z"/>' +
+    '<ellipse class="b" cx="50" cy="108" rx="15" ry="4.5"/><ellipse class="t" cx="50" cy="106.5" rx="15" ry="3.6"/>' +
+    '<path class="b" d="M50 56 C61 63 69 75 69 90 C69 99 61 105 50 105 C39 105 31 99 31 90 C31 75 39 63 50 56z"/>' +
+    '<path class="e" d="M44 72 l11 14" stroke-width="3.2" stroke-linecap="round"/>' +
+    '<circle class="b" cx="50" cy="51" r="5.5"/>',
+  q:
+    '<path class="b" d="M33 142 C35 120 39 104 42 92 h16 c3 12 7 28 9 50z"/>' +
+    '<ellipse class="b" cx="50" cy="92" rx="16" ry="4.5"/><ellipse class="t" cx="50" cy="90.5" rx="16" ry="3.6"/>' +
+    '<path class="b" d="M30 92 L25 62 L34 75 L38 53 L45 73 L50 48 L55 73 L62 53 L66 75 L75 62 L70 92z"/>' +
+    '<circle class="b" cx="25" cy="59" r="3.4"/><circle class="b" cx="38" cy="50" r="3.4"/><circle class="b" cx="50" cy="45" r="3.6"/><circle class="b" cx="62" cy="50" r="3.4"/><circle class="b" cx="75" cy="59" r="3.4"/>',
+  k:
+    '<path class="b" d="M33 142 C35 118 39 100 42 86 h16 c3 14 7 32 9 56z"/>' +
+    '<ellipse class="b" cx="50" cy="86" rx="16" ry="4.5"/><ellipse class="t" cx="50" cy="84.5" rx="16" ry="3.6"/>' +
+    '<path class="b" d="M35 86 C35 72 40 62 50 60 C60 62 65 72 65 86z"/>' +
+    '<path class="b" d="M47 30 h6 v10 h10 v6 h-10 v16 h-6 v-16 h-10 v-6 h10z"/>',
+};
+
+function ensurePieceDefs() {
+  if (document.getElementById("pieceDefs")) {
+    return;
+  }
+
+  const holder = document.createElement("div");
+  holder.innerHTML =
+    '<svg id="pieceDefs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>' +
+    // 本體:左→右漸層,亮點偏左 ⇒ 圓柱車床感(白=象牙色;黑=站上原本的海軍藍系)
+    '<linearGradient id="pgw" x1="0" x2="1" y1="0" y2="0">' +
+    '<stop offset="0" stop-color="#a8956f"/><stop offset=".16" stop-color="#e6dbc6"/><stop offset=".36" stop-color="#fffaf0"/>' +
+    '<stop offset=".6" stop-color="#eee2cd"/><stop offset=".84" stop-color="#c4ae8c"/><stop offset="1" stop-color="#7d6749"/></linearGradient>' +
+    '<linearGradient id="pgb" x1="0" x2="1" y1="0" y2="0">' +
+    '<stop offset="0" stop-color="#0a1120"/><stop offset=".16" stop-color="#34496a"/><stop offset=".36" stop-color="#6d85a8"/>' +
+    '<stop offset=".6" stop-color="#3b5170"/><stop offset=".84" stop-color="#18253c"/><stop offset="1" stop-color="#03070e"/></linearGradient>' +
+    // 頂面:上→下,比本體亮(受光面)
+    '<linearGradient id="ptw" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fffdf7"/><stop offset="1" stop-color="#e2d5bd"/></linearGradient>' +
+    '<linearGradient id="ptb" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#7d95b8"/><stop offset="1" stop-color="#3f5677"/></linearGradient>' +
+    "</defs></svg>";
+  document.body.prepend(holder.firstElementChild);
 }
 
 function createPieceElement(piece, fileIndex, rank) {
@@ -310,22 +381,18 @@ function createPieceElement(piece, fileIndex, rank) {
   const pieceElement = document.createElement("span");
   const pieceShadow = document.createElement("span");
   const pieceCore = document.createElement("span");
-  const pieceBase = document.createElement("span");
-  const pieceBody = document.createElement("span");
-  const pieceTop = document.createElement("span");
-  const pieceDetail = document.createElement("span");
 
+  ensurePieceDefs();
   pieceElement.className = `piece piece-${piece.type} ${knightFacingClass} ${piece.color === "w" ? "white" : "black"}`.trim();
   pieceShadow.className = "piece-shadow";
   pieceCore.className = "piece-core";
-  pieceBase.className = "piece-base";
-  pieceBody.className = "piece-body";
-  pieceTop.className = "piece-top";
-  pieceDetail.className = "piece-detail";
   pieceElement.style.setProperty("--piece-height-scale", displayMetrics.heightScale.toFixed(3));
   pieceElement.style.setProperty("--piece-size-scale", displayMetrics.sizeScale.toFixed(3));
   pieceElement.style.setProperty("--piece-lift", `${displayMetrics.lift.toFixed(1)}px`);
-  pieceCore.append(pieceBase, pieceBody, pieceTop, pieceDetail);
+  // 🎨 v17:棋子本體=一張 SVG(見 PIECE_SVG)。xMidYMax ⇒ 底座貼在 .piece-core 底部,高矮不同的棋子腳都在同一條線上。
+  pieceCore.innerHTML =
+    `<svg class="piece-svg pc-${piece.color}" viewBox="0 0 100 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false">` +
+    PIECE_SVG_BASE + (PIECE_SVG[piece.type] || "") + "</svg>";
   pieceElement.append(pieceShadow, pieceCore);
   return pieceElement;
 }
