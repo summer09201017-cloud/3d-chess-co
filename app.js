@@ -1340,6 +1340,9 @@ function boot() {
   renderSaveSlots();
   render();
   maybeRunAiMove();
+  /* 🔗 ?daily 深連結(0906,信友火花「今日挑戰」卡直達):等於代按「📅 每日殘局」。
+     放在 boot 最後:startDailyGame 自己會 cancelAiThink(),上面 maybeRunAiMove 若替自動存檔的舊局排了 AI 思考也會被取消。 */
+  if (/[?&]daily(?:=|&|$)/.test(location.search)) startDailyGame();
 }
 
 boot();
