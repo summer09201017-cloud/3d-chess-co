@@ -858,3 +858,20 @@ select {
     grid-template-columns: 42px 1fr 1fr;
   }
 }
+
+/* 🏷 版本與改版簡歷:預設收合、打開可捲(ver-fold v1(game-must-haves/fold-vertag))
+   ★ max-height + overflow 是重點:少了它,「打開」只是把遮擋換個時機
+     —— 1000 字以上的簡歷照樣蓋掉選單(撞球 0907 的原病)。 */
+.ver-fold { margin-top: 10px; text-align: left; }
+.ver-fold > summary {
+  cursor: pointer; list-style: none; padding: 4px 2px;
+  font-size: .82rem; line-height: 1.4; opacity: .72;
+}
+.ver-fold > summary::-webkit-details-marker { display: none; }
+.ver-fold > summary::before { content: "▸ "; }
+.ver-fold[open] > summary::before { content: "▾ "; }
+.ver-fold > summary:hover, .ver-fold > summary:focus-visible { opacity: 1; }
+.ver-fold[open] > :not(summary) {
+  max-height: min(46vh, 340px); overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
