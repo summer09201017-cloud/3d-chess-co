@@ -875,3 +875,77 @@ select {
   max-height: min(46vh, 340px); overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* ▼ 收起選單 / ▲ 展開選單(v26,2026-09-14)
+   由來:下棋中右邊(手機是下面)那一整欄控制面板一直開著,棋盤被擠在 1.75fr 裡;使用者拍板「要能收起來」。
+   做法:鈕在 .board-panel 頂端(不在會被收掉的面板裡),按下切 body.menu-folded(app.js 接線,狀態記 localStorage)。
+   ★ 收起只藏 aside.control-column 與標題文字 .hero-copy;重新開局/每日殘局那排鈕與棋盤下方工具列都留著。
+   ★ 棋盤是純 CSS 尺寸(.board width:min(100%,720px)):收起後 .layout 變單欄、上限放到 840px ⇒ 桌機棋盤真的變大;
+     手機本來就滿寬,收起的好處是頁面短很多。第一幀由 index.html <body> 開頭的小 script 先套 class,不閃。
+   ★ 手機放大鈕(mfs immersive)的 900px 規則寫在 index.html 內嵌 style、排在本檔之後 ⇒ 兩者同時開時它贏,不衝突。 */
+.fold-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.fold-button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.34);
+  color: var(--text);
+  font-weight: 700;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease;
+}
+
+.fold-button:hover,
+.fold-button:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+body.menu-folded .control-column,
+body.menu-folded .hero-copy {
+  display: none;
+}
+
+body.menu-folded .layout {
+  grid-template-columns: 1fr;
+}
+
+body.menu-folded .board {
+  width: min(100%, 840px);
+}
+
+body.menu-folded .hero-card {
+  padding: 14px 18px;
+}
+
+body.menu-folded .hero-actions {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media (max-width: 720px) {
+  .fold-button {
+    width: 100%;
+  }
+
+  /* 收起時上方只剩那排鈕:讓它們並排成一列,不要各佔一行(上面 720 斷點把 .secondary-button 設成 100% 寬) */
+  body.menu-folded .hero-actions .primary-button,
+  body.menu-folded .hero-actions .secondary-button {
+    width: auto;
+    flex: 1 1 120px;
+  }
+}
+
+/* 觸控裝置右上角固定著 ⛶ 放大鈕(index.html mfs 段,42px);收起後標題卡只剩一列鈕、剛好頂到它底下,
+   最右那顆鈕的右緣會被 ⛶ 蓋住按不到 ⇒ 收起時右邊讓出一顆鈕的位子。桌機沒有 ⛶,不讓。 */
+@media (max-width: 720px) and (pointer: coarse) {
+  body.menu-folded .hero-card {
+    padding-right: 62px;
+  }
+}

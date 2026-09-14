@@ -26,6 +26,10 @@
   ★ 差分測試(舊 vs 新,easy/medium 各 18 局面 + hard 抽測):根層每一手分數逐一相同 —— 只是快,不是變弱。
   提示按下先畫「💡 想一下…」、下一個 tick 才算(app.js showHint);browser-check 等 `state.hint` 出現而不賭毫秒。
 - 對 AI 三檔、棋譜回放、存讀檔、📱 安裝 APP(PWA)。
+- ▼ **收起選單**(v26,2026-09-14,使用者拍板):棋盤上方一顆「▼ 收起選單 / ▲ 展開選單」鈕(`#menuFoldButton`,在 `.board-panel` 頂端的 `.fold-bar`,不在會被收掉的面板裡,桌機手機都按得到)。
+  按下切 `body.menu-folded`:CSS 藏掉 `aside.control-column`(對戰設定/對局資訊/棋盤顯示/存檔區/步數回看)與標題文字 `.hero-copy`,`.layout` 變單欄、`.board` 上限 720→840px(桌機棋盤真的變大;手機本來就滿寬,好處是頁面短很多)。
+  重新開局/每日殘局那排鈕與棋盤下方工具列(提示/悔棋/上一步…)都留著。狀態記 localStorage `3d-chess-co.menuFolded`(讀寫包 try/catch),
+  `index.html` `<body>` 開頭一支小 script 第一幀先套 class 不閃;切換後補發一次 `resize`。`aria-expanded` 跟著切。驗收:`scripts/check-fold.mjs`。
 
 ## 檔案
 
@@ -36,18 +40,21 @@
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v25"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次))) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v26"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
-| `test/daily.mjs` | `npm test`:每日殘局資料檢查 |
+| `test/daily.mjs` / `test/ai.mjs` | `npm test`:每日殘局資料檢查 + 提示品質/AI 可走 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |
+| `scripts/check-fold.mjs` | 「▼ 收起選單」真點擊驗收:桌機 1200×800 + 手機直向 390×844 各一輪(鈕看得見/面板 offsetParent 變 null/棋盤不變小/再按展開/reload 記得住/零 pageerror) |
 
 ## 跑起來 / 測試
 
 ```bash
 npm install
 npm run serve          # py -m http.server 4174;直接雙擊 index.html 會讓 SW 失效
-npm test               # node test/daily.mjs
+npm test               # node test/daily.mjs && node test/ai.mjs
 node scripts/browser-check.mjs
+node scripts/check-fold.mjs                                   # 收起選單驗收;預設打 localhost:4174(先 npm run serve)
+CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fold.mjs   # 部署後對線上再跑一次
 ```
 
 ## 部署(手動,push 不會上線)
@@ -67,6 +74,7 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 
 - 作品集已收、`sites.json` 已登。新功能上線後照 skill `portfolio-ledger-guard` 收尾。
 - ✅ **統計打點已接(0905)**:`index.html` 三層(開啟 / `-done` / `-dwell`),站名 `3dchesscodex`;`-done` 在 `app.js` 的 `render()` 以 game 物件身分去重(同一局只發一次)。hfpc-play-stats 的 `NAMES` 已登顯示名。
+- ✅ **收起選單已上線(0914,sw v26)**:見「功能」段。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fold.mjs`。
 
 ---
 GitHub:`summer09201017-cloud/3d-chess-co`。本 README 2026-09-03 補(此前文件沒寫網址,作品集對賬只能靠名字猜到本 repo)。

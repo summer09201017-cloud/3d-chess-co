@@ -1395,6 +1395,31 @@ function registerEvents() {
     });
     paintNames();
   }
+
+  // ▼ 收起選單 / ▲ 展開選單(v26):下棋中把旁邊那一欄控制面板(手機是下面那一長串)收起來,棋盤拿到整個寬度。
+  //    切的是 body.menu-folded(藏什麼、棋盤放多大都在 styles.css);狀態記 localStorage。
+  //    index.html <body> 開頭的小 script 會在第一幀先套上 class(不閃),這裡負責接鈕、同步鈕面文字與 aria-expanded。
+  //    棋盤是純 CSS 尺寸,不用重算;resize 是補給有人聽的(艦隊慣例,和 mfs 放大鈕同一招)。
+  const MENU_FOLD_KEY = "3d-chess-co.menuFolded";
+  const menuFoldButtonElement = document.querySelector("#menuFoldButton");
+  if (menuFoldButtonElement) {
+    let folded = false;
+    try { folded = localStorage.getItem(MENU_FOLD_KEY) === "1"; } catch { /* 私密模式照玩 */ }
+    const paintFold = () => {
+      document.body.classList.toggle("menu-folded", folded);
+      menuFoldButtonElement.textContent = folded ? "▲ 展開選單" : "▼ 收起選單";
+      menuFoldButtonElement.setAttribute("aria-expanded", folded ? "false" : "true");
+      requestAnimationFrame(() => {
+        try { window.dispatchEvent(new Event("resize")); } catch { /* 沒人聽也無妨 */ }
+      });
+    };
+    menuFoldButtonElement.addEventListener("click", () => {
+      folded = !folded;
+      try { localStorage.setItem(MENU_FOLD_KEY, folded ? "1" : "0"); } catch { /* 私密模式照玩 */ }
+      paintFold();
+    });
+    paintFold();
+  }
   prevMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() - 1));
   nextMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() + 1));
   latestMoveButtonElement.addEventListener("click", () => goToPly(getHistory().length));
