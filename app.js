@@ -97,9 +97,16 @@ function applyBoardView() {
   boardSceneElement.classList.toggle("is-dragging", Boolean(state.dragState));
   boardElement.style.setProperty("--board-rotate-x", `${effectiveTilt}deg`);
   boardElement.style.setProperty("--board-rotate-z", `${continuousRotation(normalizedRotation)}deg`);
-  fitBoard();
-  setTimeout(fitBoard, 220);   // .board 的 transform 有 180ms transition,量太早會拿到過渡中的投影框
-  setTimeout(fitBoard, 750);   // 進真全螢幕時瀏覽器還會再重排一輪(0914 實測 600ms 才穩),再補量一次
+  /* v29:拖曳中**不量**。v27 在這裡同步跑 fitBoard(300 個 getBoundingClientRect × 5 輪 + 兩個 setTimeout),
+     而 pointermove 每一下都經過這裡 ⇒ 沉浸/橫向時 30 下 pointermove 要 2.6~3.0 秒(直向沒開 fit-play 只要 2ms)
+     —— 使用者「LAG 延遲很嚴重,特別是全螢幕後,棋盤轉動很困難」就是它。放手(finishBoardDrag)才量一次。 */
+  if (!state.dragState) scheduleFitBoard();
+}
+let fitBoardTimer = 0;
+/* 去抖 + 兩段補量:transform 有 180ms transition、進真全螢幕還會再重排一輪 */
+function scheduleFitBoard() {
+  clearTimeout(fitBoardTimer);
+  fitBoardTimer = setTimeout(() => { fitBoard(); setTimeout(fitBoard, 550); }, 200);
 }
 
 /* ⛶ fit-play「玩的版面」(v27,2026-09-14)。CSS 在 styles.css 檔尾;這裡管三件事:
@@ -116,6 +123,7 @@ function fitBoard() {
   const wrap = document.querySelector(".scene-wrap");
   if (!wrap || !boardElement || !boardSceneElement) return;
   if (!fitPlayActive()) {
+    fitBoard.lastKey = "";
     boardElement.style.removeProperty("--fit-board-w");
     boardSceneElement.style.removeProperty("--fit-shift-x");
     boardSceneElement.style.removeProperty("--fit-shift-y");
@@ -126,6 +134,10 @@ function fitBoard() {
   const availW = wrap.clientWidth - PAD * 2;
   const availH = wrap.clientHeight - PAD * 2;
   if (availW < 80 || availH < 80) return;
+  /* v29 快取:同一組(可用區 × 俯角 × 水平角 × 模式 × 收起工具列)量過就不重量 —— render() 每走一手都會經過 applyBoardView */
+  const key = [Math.round(availW), Math.round(availH), boardElement.style.getPropertyValue("--board-rotate-x"), boardElement.style.getPropertyValue("--board-rotate-z"), state.boardMode, document.body.classList.contains("tools-folded")].join("|");
+  if (fitBoard.lastKey === key) return;
+  fitBoard.lastKey = key;
   /* 投影框 = 棋盤本體 ∪ 棋盤裡所有子孫(棋子 translateZ 抬高、棋名標籤 .nm 又絕對定位在棋子上方,
      只量 .board 或只量 .piece 都會把最遠那排的頭切掉——0914 桌機截圖黑方城堡的「兵」標籤貼著上緣) */
   const bbox = () => {
@@ -166,10 +178,23 @@ function fitBoard() {
     boardElement.style.setProperty("--fit-board-w", `${Math.floor(w)}px`);
   }
 }
+let lastImmersive = false;
 function syncFitPlay() {
-  const on = document.body.classList.contains("immersive") || Boolean(fitPlayMedia && fitPlayMedia.matches);
+  const immersive = document.body.classList.contains("immersive");
+  const on = immersive || Boolean(fitPlayMedia && fitPlayMedia.matches);
   document.body.classList.toggle("fit-play", on);
   if (!on) document.body.classList.remove("panels-open");
+  /* v29 使用者:「全螢幕時仍看到選單,不是真正全螢幕」⇒ 按 ⛶ 進沉浸那一刻工具列預設**收起**,只剩棋盤 + ✕ + 🧰;
+     退出沉浸就展開回來(手機橫向自動滿版沒按 ⛶ 的話工具列留著——那不是使用者要的全螢幕)。 */
+  if (immersive !== lastImmersive) { document.body.classList.toggle("tools-folded", immersive); lastImmersive = immersive; }
+  if (!on) document.body.classList.remove("tools-folded");
+  const toolsBtn = document.querySelector("#toolsToggleButton");
+  if (toolsBtn) {
+    const folded = document.body.classList.contains("tools-folded");
+    toolsBtn.textContent = folded ? "🧰 工具" : "▾ 收起工具";
+    toolsBtn.setAttribute("aria-expanded", String(!folded));
+  }
+  fitBoard.lastKey = "";
   const btn = document.querySelector("#playMenuButton");
   if (btn) {
     const open = document.body.classList.contains("panels-open");
@@ -1318,10 +1343,16 @@ function handleBoardPointerDown(event) {
     return;
   }
 
+  /* v29 轉盤式旋轉(使用者:「橫式棋盤轉動是反方向」):v21 的「往右拖 ⇒ 近端往右」只在抓**近端**時對——
+     棋盤放大到滿螢幕後手指常落在**遠端**,遠端往左走 = 反的。改成量「手指繞棋盤中心的角度差」:
+     抓哪一邊,那一邊就跟著手指走(像用手撥轉盤),近端/遠端/左右都對。太靠近中心(半徑 <48px)角度不穩,退回舊的 deltaX 法。 */
+  const boardRect = boardElement.getBoundingClientRect();
   state.dragState = {
     pointerId: event.pointerId,
     startX: event.clientX,
     startY: event.clientY,
+    centerX: boardRect.left + boardRect.width / 2,
+    centerY: boardRect.top + boardRect.height / 2,
     startRotation: state.cameraRotation,
     startTilt: state.cameraTilt,
     moved: false,
@@ -1353,11 +1384,26 @@ function handleBoardPointerMove(event) {
 
   /* 拖曳靈敏度(2026-09-07 使用者拍板「轉太快」):原本 0.65°/px,橫拖半個棋盤就轉了半圈;
      現在 0.25°/px ⇒ 拖過整個 720px 棋盤約轉半圈(180°),俯仰 0.08°/px ⇒ 拖滿 700px 才走完 20°~76° 全程。 */
+  const d = state.dragState;
+  const r0 = Math.hypot(d.startX - d.centerX, d.startY - d.centerY);
+  let rotation;
+  if (r0 >= 48) {
+    /* 轉盤:手指相對棋盤中心的角度差(螢幕座標 y 朝下 ⇒ atan2 順時針為正 = CSS rotateZ 正向) */
+    const a0 = Math.atan2(d.startY - d.centerY, d.startX - d.centerX);
+    const a1 = Math.atan2(event.clientY - d.centerY, event.clientX - d.centerX);
+    let da = (a1 - a0) * 180 / Math.PI;
+    while (da > 180) da -= 360;
+    while (da < -180) da += 360;
+    rotation = d.startRotation + da;
+  } else {
+    rotation = d.startRotation - deltaX * 0.12;
+  }
   updateBoardView({
     /* v21 使用者再退件:「還是太快、太靈敏;滑鼠往右棋盤往左轉是反的」。
        ① 0.25 → 0.12°/px(拖過整個 720px 棋盤約 86°,不到四分之一圈);俯仰 0.08 → 0.05。
-       ② 方向取負:抓著近端棋盤邊往右拖,近端就往右走(像用手撥轉盤),不是鏡頭繞著棋盤走。 */
-    cameraRotation: state.dragState.startRotation - deltaX * 0.12,
+       ② 方向取負:抓著近端棋盤邊往右拖,近端就往右走(像用手撥轉盤),不是鏡頭繞著棋盤走。
+       v29:水平角改上面的轉盤式(抓遠端也對),這裡只留俯仰。 */
+    cameraRotation: rotation,
     cameraTilt: state.boardMode === "3d"
       ? state.dragState.startTilt - deltaY * 0.05
       : state.cameraTilt,
@@ -1378,7 +1424,7 @@ function finishBoardDrag(event) {
   }
 
   state.dragState = null;
-  applyBoardView();
+  applyBoardView();   // dragState 已清 ⇒ 這一次會排 fitBoard(拖曳中都沒量)
 
   if (moved) {
     saveAuto();
@@ -1514,6 +1560,13 @@ function registerEvents() {
     const on = document.body.classList.contains("immersive") || Boolean(fitPlayMedia && fitPlayMedia.matches);
     if (on !== document.body.classList.contains("fit-play")) syncFitPlay(); else fitBoard();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  const toolsToggleButtonElement = document.querySelector("#toolsToggleButton");
+  if (toolsToggleButtonElement) {
+    toolsToggleButtonElement.addEventListener("click", () => {
+      document.body.classList.toggle("tools-folded");
+      syncFitPlay();
+    });
+  }
   const playMenuButtonElement = document.querySelector("#playMenuButton");
   if (playMenuButtonElement) {
     playMenuButtonElement.addEventListener("click", () => {

@@ -81,6 +81,7 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 - ✅ **拔掉「index.html 進 SW 快取名單」地雷(0914 全艦隊,sw v28 / verTag v28)**:`APP_SHELL` 拔 `./index.html`、退路 `caches.match("./")` 只給導覽請求、`addAll` → 逐一 `add().catch()`;線上 `check-sw-nav-fleet.mjs` 🟢(開 /index.html 兩次不 ERR_FAILED、快取無 redirected、離線回殼層)。見上面「部署」段的 ⚠。
 - ✅ **收起選單已上線(0914,sw v26)**:見「功能」段。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fold.mjs`。
 - ✅ **⛶ 放大真的放大 + 桌機 ⛶ + 手機橫向自動滿版(0914,sw v27)**:`body.fit-play`(app.js `syncFitPlay`/`fitBoard`,styles.css 檔尾)—— 沉浸或手機橫向時整頁一屏、棋盤用真投影框逐步縮放到剛好裝進棋盤區(`--fit-board-w`),工具列橫向改直排在右;`#mfsExit` 是看得見的出口(同一個 toggle);「☰ 選單」= `body.panels-open` 暫回一般版面。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fit.mjs`。
+- ✅ **v29(0915,sw v29)三件**:🐢 拖曳不再 LAG——v27 在 `applyBoardView` 同步跑 `fitBoard`(300 個 rect × 5 輪),pointermove 每下都經過 ⇒ 沉浸/橫向 30 下 pointermove 2.6~3.0 秒(直向 2ms);現在 `state.dragState` 在就不量,放手 `scheduleFitBoard()` 去抖 200ms + 550ms 補量,且 `fitBoard` 加快取 key。🔄 轉盤式旋轉——`handleBoardPointerMove` 量手指繞棋盤中心的角度差(半徑 <48px 退回 deltaX 法),抓遠端也跟手。🧰 沉浸預設 `body.tools-folded`(進沉浸那一刻套、退出拿掉;`#toolsToggleButton` 右下角切),工具列藏、狀態縮成左下小藥丸。check-fit.mjs 加 ⑨(拖曳耗時 <300ms、近端/遠端轉向)。
 
 ---
 GitHub:`summer09201017-cloud/3d-chess-co`。本 README 2026-09-03 補(此前文件沒寫網址,作品集對賬只能靠名字猜到本 repo)。

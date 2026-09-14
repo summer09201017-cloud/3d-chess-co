@@ -26,17 +26,42 @@ const ok = (cond, msg, note = "") => {
 const errors = [];
 
 const snap = (page) => page.evaluate(() => {
-  const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), right: Math.round(b.right), bottom: Math.round(b.bottom), vis: !!e.offsetParent && getComputedStyle(e).display !== "none" && getComputedStyle(e).visibility !== "hidden" }; };
+  /* vis 不用 offsetParent:position:fixed 的元素 offsetParent 是 null(v28 收起工具列時狀態列變成 fixed 小藥丸) */
+  const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), right: Math.round(b.right), bottom: Math.round(b.bottom), vis: b.width > 0 && b.height > 0 && getComputedStyle(e).display !== "none" && getComputedStyle(e).visibility !== "hidden" }; };
   const fixedVis = (sel) => { const e = document.querySelector(sel); if (!e) return false; const cs = getComputedStyle(e); const b = e.getBoundingClientRect(); return cs.display !== "none" && b.width > 0 && b.top >= 0 && b.bottom <= innerHeight && b.left >= 0; };
   return {
     body: document.body.className, vw: innerWidth, vh: innerHeight,
     scrollH: document.documentElement.scrollHeight,
     board: r("#board"), status: r("#statusText"), hero: r(".hero-card"), controls: r("#controlColumn"), toolbar: r(".board-toolbar"),
-    fullVis: fixedVis("#mfsFull"), exitVis: fixedVis("#mfsExit"),
+    fullVis: fixedVis("#mfsFull"), exitVis: fixedVis("#mfsExit"), toolsVis: fixedVis("#toolsToggleButton"),
     chipsVisible: [...document.querySelectorAll(".board-toolbar button")].filter((b) => { const x = b.getBoundingClientRect(); return x.width > 0 && x.top >= 0 && x.bottom <= innerHeight; }).length,
     menuChip: r("#playMenuButton"),
   };
 });
+/* v28:拖曳 LAG 量法 —— 在頁面內派 30 個 pointermove 給棋盤,量 handler 總耗時(v27 沉浸時 2.6~3.0 秒,直向 2ms) */
+const dragCost = (page) => page.evaluate(() => {
+  const scene = document.getElementById("boardScene"); const r = document.getElementById("board").getBoundingClientRect();
+  const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+  const ev = (type, x, y) => new PointerEvent(type, { clientX: x, clientY: y, pointerId: 9, pointerType: "touch", isPrimary: true, bubbles: true, button: 0 });
+  scene.dispatchEvent(ev("pointerdown", cx, cy + 60));
+  const t = performance.now();
+  for (let i = 1; i <= 30; i++) scene.dispatchEvent(ev("pointermove", cx + i * 4, cy + 60));
+  const dt = performance.now() - t;
+  scene.dispatchEvent(ev("pointercancel", cx + 120, cy + 60));
+  return Math.round(dt);
+});
+/* v28:轉盤式旋轉 —— 抓近端(中心下方)往右拖 ⇒ 角度減;抓遠端(中心上方)往右拖 ⇒ 角度增(遠端跟著手指往右) */
+const dragRotate = async (page, dyFromCenter) => {
+  const c = await page.evaluate(() => { const r = document.getElementById("board").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const before = await page.evaluate(() => window.__chess.state.cameraRotation);
+  await page.mouse.move(c.x, c.y + dyFromCenter); await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(c.x + i * 10, c.y + dyFromCenter);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => window.__chess.state.cameraRotation);
+  let d = after - before; while (d > 180) d -= 360; while (d < -180) d += 360;
+  return d;
+};
 const inView = (b, s) => b && b.x >= -1 && b.y >= -1 && b.right <= s.vw + 1 && b.bottom <= s.vh + 1;
 /* 等棋盤投影框穩定(俯角有 180ms transition,進真全螢幕時瀏覽器還會重排一輪 ⇒ 固定等 450ms 會量到過渡中的框;
    0914 實測 300ms 時 h=183、600ms 才到 268)。連兩次取樣相同就算穩,最多等 2.5 秒。 */
@@ -72,8 +97,22 @@ console.log("── 桌機 1280×720 ──");
   ok(s.board && before && s.board.h > before.h * 1.05, "② 比按之前更大", `${before?.h} → ${s.board?.h}`);
   ok(s.scrollH <= s.vh + 2, "② 整頁一屏、不用捲", `${s.scrollH} vs ${s.vh}`);
   ok(s.exitVis && !s.fullVis, "② ✕ 離開看得見、⛶ 藏起來(出口不是隱形的)");
-  ok(s.chipsVisible >= 7, "② 工具列鈕(提示/悔棋/上一步…)都在畫面內", String(s.chipsVisible));
-  ok(s.status && s.status.vis && inView(s.status, s), "② 狀態列(輪到誰)看得見");
+  ok(s.body.includes("tools-folded") && s.chipsVisible === 0, "② v28 進沉浸工具列預設收起(只剩棋盤,「不是真正全螢幕」那句)", `${s.body} chips=${s.chipsVisible}`);
+  ok(s.toolsVis, "② 右下角 🧰 工具 鈕看得見");
+  ok(s.status && s.status.vis && inView(s.status, s), "② 狀態列(輪到誰)縮成左下小藥丸仍看得見");
+  const foldedBoardH = s.board?.h || 0;
+  await clickFixed(page, "#toolsToggleButton");
+  s = await snap(page);
+  ok(!s.body.includes("tools-folded") && s.chipsVisible >= 7, "② 按 🧰 ⇒ 工具列回來(提示/悔棋/上一步…都在畫面內)", `${s.body} chips=${s.chipsVisible}`);
+  ok(inView(s.board, s), "② 工具列回來後棋盤仍整個在畫面內", JSON.stringify(s.board));
+  await clickFixed(page, "#toolsToggleButton");
+  s = await snap(page);
+  ok(s.body.includes("tools-folded") && s.board && s.board.h >= foldedBoardH - 2, "② 再按 ⇒ 收起、棋盤回到滿版大小");
+  const costFs = await dragCost(page);
+  ok(costFs < 300, `⑨ 沉浸時拖 30 下 pointermove 的 handler 總耗時 < 300ms(v27 是 2600~3000ms)`, `${costFs}ms`);
+  const near = await dragRotate(page, 120), far = await dragRotate(page, -120);
+  ok(near < -3, `⑨ 抓近端往右拖 ⇒ 近端跟手(角度減 ${near.toFixed(1)}°)`);
+  ok(far > 3, `⑨ 抓遠端往右拖 ⇒ 遠端跟手(角度增 ${far.toFixed(1)}°;v27 是反的)`);
   await clickFixed(page, "#mfsExit");
   s = await snap(page);
   ok(!s.body.includes("immersive") && !s.body.includes("fit-play"), "③ 按 ✕ ⇒ 沉浸與 fit-play 都關", s.body);

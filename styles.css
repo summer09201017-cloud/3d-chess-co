@@ -1008,3 +1008,23 @@ body.fit-play:not(.panels-open) .status-text { font-size: 12.5px; line-height: 1
 }
 /* 桌機也有右上角固定的 ⛶ 了(42px):標題卡右邊讓出位子,免得「每日殘局」鈕右緣被蓋住 */
 .hero-card { padding-right: 64px; }
+
+/* 🧰 沉浸時工具列預設收起(v29,2026-09-15;使用者:「全螢幕時仍看到選單,不是真正全螢幕」)
+   body.tools-folded(app.js 在進沉浸那一刻套上、退出拿掉;🧰 鈕可切):藏工具列,狀態列縮成左下角小藥丸,棋盤區吃滿整屏。 */
+.tools-toggle {
+  position: fixed; right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom));
+  z-index: 2147481999; min-height: 42px; padding: 0 14px; border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.5); background: rgba(9, 15, 19, 0.72); color: #fff;
+  font-size: 13px; font-weight: 700; cursor: pointer; -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+body.fit-play:not(.panels-open) .tools-toggle { display: inline-flex; align-items: center; gap: 6px; }
+body:not(.fit-play) .tools-toggle, body.panels-open .tools-toggle { display: none !important; }
+body.fit-play:not(.panels-open).tools-folded .board-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+body.fit-play:not(.panels-open).tools-folded .scene-wrap { grid-row: 1; grid-column: 1; }
+body.fit-play:not(.panels-open).tools-folded .board-toolbar { display: none !important; }
+body.fit-play:not(.panels-open).tools-folded .status-card {
+  position: fixed; left: calc(8px + env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom));
+  z-index: 5; width: auto; max-width: min(60vw, 420px); padding: 4px 10px; border-radius: 999px;
+  background: rgba(9, 15, 19, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); pointer-events: none;
+}
+body.fit-play:not(.panels-open).tools-folded .status-text { font-size: 12px; line-height: 1.35; }
