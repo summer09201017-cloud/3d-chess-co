@@ -40,7 +40,7 @@
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v26"`(改殼層檔必 +1;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914))) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v28"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` / `test/ai.mjs` | `npm test`:每日殘局資料檢查 + 提示品質/AI 可走 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |
@@ -70,10 +70,15 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 改了 `index.html` / CSS / manifest / assets 任何殼層檔,先把 `sw.js` 的 `CACHE_NAME` 版本 +1 再部署,
 否則已安裝的 PWA 永遠看到舊版。
 
+⚠ **SW 快取名單與離線退路不可以有 `index.html`(0914 全艦隊修,sw v28)**:Cloudflare Pages 把 `/index.html` 308 到 `/`,
+名單裡有它 install 就存到 redirected 回應,裝成 App 打開就 ERR_FAILED(3D-Chess 幻影版實錘)。一律只認 `./`;install 逐一 add+catch 不用 addAll。
+補丁來源:skill `static-pwa-ship/patches/patch-sw-index.mjs`;線上重演 `scripts/check-sw-nav-fleet.mjs <url>` 要 🟢。
+
 ## 帳本 / 待補
 
 - 作品集已收、`sites.json` 已登。新功能上線後照 skill `portfolio-ledger-guard` 收尾。
 - ✅ **統計打點已接(0905)**:`index.html` 三層(開啟 / `-done` / `-dwell`),站名 `3dchesscodex`;`-done` 在 `app.js` 的 `render()` 以 game 物件身分去重(同一局只發一次)。hfpc-play-stats 的 `NAMES` 已登顯示名。
+- ✅ **拔掉「index.html 進 SW 快取名單」地雷(0914 全艦隊,sw v28 / verTag v28)**:`APP_SHELL` 拔 `./index.html`、退路 `caches.match("./")` 只給導覽請求、`addAll` → 逐一 `add().catch()`;線上 `check-sw-nav-fleet.mjs` 🟢(開 /index.html 兩次不 ERR_FAILED、快取無 redirected、離線回殼層)。見上面「部署」段的 ⚠。
 - ✅ **收起選單已上線(0914,sw v26)**:見「功能」段。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fold.mjs`。
 - ✅ **⛶ 放大真的放大 + 桌機 ⛶ + 手機橫向自動滿版(0914,sw v27)**:`body.fit-play`(app.js `syncFitPlay`/`fitBoard`,styles.css 檔尾)—— 沉浸或手機橫向時整頁一屏、棋盤用真投影框逐步縮放到剛好裝進棋盤區(`--fit-board-w`),工具列橫向改直排在右;`#mfsExit` 是看得見的出口(同一個 toggle);「☰ 選單」= `body.panels-open` 暫回一般版面。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fit.mjs`。
 
