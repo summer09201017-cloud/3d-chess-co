@@ -949,3 +949,62 @@ body.menu-folded .hero-actions {
     padding-right: 62px;
   }
 }
+
+/* ⛶ 「玩的版面」fit-play(v27,2026-09-14)
+   由來:使用者 0914「按了放大棋盤沒有變大」+「手機橫向棋盤在畫面外」+「PC 版完全沒有 ⛶」。
+   原本的沉浸模式(index.html mfs 段)只藏 hero、棋盤寬度 100% ⇒ 手機直向棋盤本來就滿寬,一點都沒變大;
+   橫向時上面 fold-bar + 棋盤 + 工具列 + 狀態卡疊成 900px 長頁,棋盤頂端在螢幕外(實測 y=346/390)。
+   做法:body.fit-play(app.js 在 沉浸 或 手機橫向 時套上)⇒ 整頁固定成一屏(100dvh、不捲),
+     藏 hero / fold-bar / 設定欄 / 簡歷,.board-panel 變 grid:棋盤區吃掉剩下的高度,工具列與狀態一行排在下面;
+     橫向矮螢幕時工具列改直排在右邊 124px 欄,棋盤吃滿整個高度。
+   ★ 棋盤到底放多大是 app.js fitBoard() 量出來的:用 getBoundingClientRect(含 3D 透視投影)逐步縮放到剛好裝進棋盤區,
+     寫進 --fit-board-w;純 CSS 算不出「rotateX 52° 之後的投影高度」。
+   ★ body.panels-open(「☰ 選單」鈕)= 暫時回到一般長頁版面看設定欄;fit-play class 仍在,鈕才看得到。 */
+.play-only { display: none; }
+body.fit-play .play-only { display: inline-flex; align-items: center; justify-content: center; }
+body.fit-play:not(.panels-open) { height: 100dvh; overflow: hidden; }
+body.fit-play:not(.panels-open) .app-shell {
+  width: 100%; height: 100dvh; margin: 0; box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  display: flex; flex-direction: column;
+}
+body.fit-play:not(.panels-open) .hero-card,
+body.fit-play:not(.panels-open) .fold-bar,
+body.fit-play:not(.panels-open) .control-column,
+body.fit-play:not(.panels-open) .install-hint,
+body.fit-play:not(.panels-open) .ver-fold { display: none !important; }
+body.fit-play:not(.panels-open) .layout { display: block; flex: 1 1 auto; min-height: 0; margin: 0; width: 100%; }
+body.fit-play:not(.panels-open) .board-panel {
+  height: 100%; box-sizing: border-box; padding: 6px; gap: 6px;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto;
+}
+body.fit-play:not(.panels-open) .scene-wrap {
+  min-height: 0; height: 100%; box-sizing: border-box; padding: 4px; border-radius: 14px;
+  display: grid; place-items: center;
+}
+body.fit-play:not(.panels-open) .board-scene {
+  width: 100%; height: 100%; min-height: 0; display: grid; place-items: center;
+  /* app.js fitBoard() 量出來的置中位移:rotateX 之後投影框重心往下,不移會溢出下緣 */
+  transform: translate(var(--fit-shift-x, 0px), var(--fit-shift-y, 0px));
+}
+body.fit-play:not(.panels-open) .board { width: var(--fit-board-w, min(100%, 720px)); max-width: 100%; }
+body.fit-play:not(.panels-open) .board-toolbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+body.fit-play:not(.panels-open) .board-toolbar .secondary-button {
+  width: auto; flex: 1 1 auto; min-height: 40px; padding: 6px 10px; font-size: 12.5px; white-space: nowrap;
+}
+body.fit-play:not(.panels-open) .status-card { padding: 4px 10px; border-radius: 10px; }
+body.fit-play:not(.panels-open) .status-text { font-size: 12.5px; line-height: 1.4; }
+/* 橫向矮螢幕(真手機橫向;iPad 橫向 ~744px 高不會中):棋盤左、工具列直排右,右欄頂端讓出 ⛶ / ✕ 的位子 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.fit-play:not(.panels-open) .board-panel { grid-template-columns: minmax(0, 1fr) 124px; grid-template-rows: minmax(0, 1fr) auto; }
+  body.fit-play:not(.panels-open) .scene-wrap { grid-row: 1 / span 2; grid-column: 1; }
+  body.fit-play:not(.panels-open) .board-toolbar {
+    grid-column: 2; grid-row: 1; flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; align-content: start;   /* ★ 不能沿用上面的 center:直排內容比欄高時 center 會上下溢出、頂端被切(0914 實測第一顆鈕壓在 ⛶ 底下) */
+    overflow-y: auto; padding-top: 52px; min-height: 0;
+  }
+  body.fit-play:not(.panels-open) .board-toolbar .secondary-button { flex: 0 0 auto; width: 100%; }
+  body.fit-play:not(.panels-open) .status-card { grid-column: 2; grid-row: 2; }
+  body.fit-play:not(.panels-open) #playMenuButton { order: -1; }   /* 右欄裝不下全部鈕會捲:「☰ 選單」排第一顆,永遠看得到 */
+}
+/* 桌機也有右上角固定的 ⛶ 了(42px):標題卡右邊讓出位子,免得「每日殘局」鈕右緣被蓋住 */
+.hero-card { padding-right: 64px; }

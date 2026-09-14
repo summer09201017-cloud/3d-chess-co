@@ -86,7 +86,10 @@ function continuousRotation(target) {
 }
 
 function applyBoardView() {
-  const effectiveTilt = state.boardMode === "3d" ? clamp(state.cameraTilt, 20, 76) : 0;
+  /* v27 fit-play 直向:棋盤被寬度卡住,俯角越大投影越扁 ⇒ 沉浸/直向時把俯角上限壓到 40°(只影響畫面,不動 state/存檔;
+     實測 390 寬:52° 投影高 192px、44° 226px、40° ~280px) */
+  const fitPortrait = fitPlayActive() && window.innerHeight > window.innerWidth;
+  const effectiveTilt = state.boardMode === "3d" ? Math.min(clamp(state.cameraTilt, 20, 76), fitPortrait ? 40 : 76) : 0;
   const normalizedRotation = normalizeRotation(state.cameraRotation);
 
   boardElement.classList.toggle("three-d", state.boardMode === "3d");
@@ -94,6 +97,86 @@ function applyBoardView() {
   boardSceneElement.classList.toggle("is-dragging", Boolean(state.dragState));
   boardElement.style.setProperty("--board-rotate-x", `${effectiveTilt}deg`);
   boardElement.style.setProperty("--board-rotate-z", `${continuousRotation(normalizedRotation)}deg`);
+  fitBoard();
+  setTimeout(fitBoard, 220);   // .board 的 transform 有 180ms transition,量太早會拿到過渡中的投影框
+  setTimeout(fitBoard, 750);   // 進真全螢幕時瀏覽器還會再重排一輪(0914 實測 600ms 才穩),再補量一次
+}
+
+/* ⛶ fit-play「玩的版面」(v27,2026-09-14)。CSS 在 styles.css 檔尾;這裡管三件事:
+   ① 什麼時候開:沉浸(index.html mfs 段切的 body.immersive)或 手機橫向(FIT_PLAY_QUERY,跟 styles.css 那條一字不差)
+   ② 棋盤放多大:fitBoard() 用真的投影框(getBoundingClientRect 含 rotateX/透視)逐步縮放到剛好裝進 .scene-wrap
+      —— 純 CSS 算不出 52° 俯角之後的投影高度;棋子會凸出棋盤上緣 ⇒ 高度只用 92%
+   ③ 「☰ 選單」:body.panels-open 暫時回一般版面看設定欄 */
+const FIT_PLAY_QUERY = "(orientation: landscape) and (max-height: 500px)";
+const fitPlayMedia = typeof matchMedia === "function" ? matchMedia(FIT_PLAY_QUERY) : null;
+function fitPlayActive() {
+  return document.body.classList.contains("fit-play") && !document.body.classList.contains("panels-open");
+}
+function fitBoard() {
+  const wrap = document.querySelector(".scene-wrap");
+  if (!wrap || !boardElement || !boardSceneElement) return;
+  if (!fitPlayActive()) {
+    boardElement.style.removeProperty("--fit-board-w");
+    boardSceneElement.style.removeProperty("--fit-shift-x");
+    boardSceneElement.style.removeProperty("--fit-shift-y");
+    return;
+  }
+  const PAD = 6;
+  const wrapR = wrap.getBoundingClientRect();
+  const availW = wrap.clientWidth - PAD * 2;
+  const availH = wrap.clientHeight - PAD * 2;
+  if (availW < 80 || availH < 80) return;
+  /* 投影框 = 棋盤本體 ∪ 棋盤裡所有子孫(棋子 translateZ 抬高、棋名標籤 .nm 又絕對定位在棋子上方,
+     只量 .board 或只量 .piece 都會把最遠那排的頭切掉——0914 桌機截圖黑方城堡的「兵」標籤貼著上緣) */
+  const bbox = () => {
+    const r = boardElement.getBoundingClientRect();
+    let x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom;
+    for (const p of boardElement.querySelectorAll("*")) {
+      const q = p.getBoundingClientRect();
+      if (!q.width) continue;
+      if (q.left < x0) x0 = q.left; if (q.top < y0) y0 = q.top; if (q.right > x1) x1 = q.right; if (q.bottom > y1) y1 = q.bottom;
+    }
+    return { x0, y0, w: x1 - x0, h: y1 - y0 };
+  };
+  boardSceneElement.style.setProperty("--fit-shift-x", "0px");
+  boardSceneElement.style.setProperty("--fit-shift-y", "0px");
+  let w = Math.min(availW, availH * 1.6);
+  for (let i = 0; i < 5; i++) {
+    boardElement.style.setProperty("--fit-board-w", `${Math.floor(w)}px`);
+    const b = bbox();
+    if (!b.w || !b.h) return;
+    const s = Math.min(availW / b.w, availH / b.h);
+    if (s >= 0.985 && s <= 1.01) break;
+    w = Math.max(120, w * Math.min(s, 1.6));
+  }
+  /* rotateX 之後投影框重心往下(近端放大、遠端縮小)⇒ 只縮不移會溢出下緣(實測桌機 bottom=814/720)。
+     把投影框中心移到棋盤區中心;移完再量一次,還裝不下就再縮一點(透視下位移不完全線性)。 */
+  for (let i = 0; i < 2; i++) {
+    const b = bbox();
+    const dx = (wrapR.left + wrapR.width / 2) - (b.x0 + b.w / 2);
+    const dy = (wrapR.top + wrapR.height / 2) - (b.y0 + b.h / 2);
+    const curX = parseFloat(boardSceneElement.style.getPropertyValue("--fit-shift-x")) || 0;
+    const curY = parseFloat(boardSceneElement.style.getPropertyValue("--fit-shift-y")) || 0;
+    boardSceneElement.style.setProperty("--fit-shift-x", `${Math.round(curX + dx)}px`);
+    boardSceneElement.style.setProperty("--fit-shift-y", `${Math.round(curY + dy)}px`);
+    const c = bbox();
+    const over = Math.max(c.w / availW, c.h / availH);
+    if (over <= 1.005) break;
+    w = Math.max(120, w / over * 0.99);
+    boardElement.style.setProperty("--fit-board-w", `${Math.floor(w)}px`);
+  }
+}
+function syncFitPlay() {
+  const on = document.body.classList.contains("immersive") || Boolean(fitPlayMedia && fitPlayMedia.matches);
+  document.body.classList.toggle("fit-play", on);
+  if (!on) document.body.classList.remove("panels-open");
+  const btn = document.querySelector("#playMenuButton");
+  if (btn) {
+    const open = document.body.classList.contains("panels-open");
+    btn.textContent = open ? "✕ 收合選單" : "☰ 選單";
+    btn.setAttribute("aria-expanded", String(open));
+  }
+  applyBoardView();   // 直向俯角上限跟著 fit-play 變;它自己會呼叫 fitBoard()
 }
 
 function syncViewControls() {
@@ -1420,6 +1503,26 @@ function registerEvents() {
     });
     paintFold();
   }
+  /* ⛶ fit-play 接線(v27):沉浸 class 是 index.html 的 mfs 段切的 ⇒ 用 MutationObserver 跟;手機橫向用 media query 跟;
+     視窗大小變了棋盤要重量。「☰ 選單」切 body.panels-open。 */
+  if (fitPlayMedia) {
+    if (fitPlayMedia.addEventListener) fitPlayMedia.addEventListener("change", syncFitPlay);
+    else if (fitPlayMedia.addListener) fitPlayMedia.addListener(syncFitPlay);
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(syncFitPlay));
+  new MutationObserver(() => {
+    const on = document.body.classList.contains("immersive") || Boolean(fitPlayMedia && fitPlayMedia.matches);
+    if (on !== document.body.classList.contains("fit-play")) syncFitPlay(); else fitBoard();
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  const playMenuButtonElement = document.querySelector("#playMenuButton");
+  if (playMenuButtonElement) {
+    playMenuButtonElement.addEventListener("click", () => {
+      document.body.classList.toggle("panels-open");
+      syncFitPlay();
+      window.scrollTo(0, 0);
+    });
+  }
+  syncFitPlay();
   prevMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() - 1));
   nextMoveButtonElement.addEventListener("click", () => goToPly(getDisplayPly() + 1));
   latestMoveButtonElement.addEventListener("click", () => goToPly(getHistory().length));

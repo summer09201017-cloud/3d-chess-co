@@ -75,6 +75,7 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 - 作品集已收、`sites.json` 已登。新功能上線後照 skill `portfolio-ledger-guard` 收尾。
 - ✅ **統計打點已接(0905)**:`index.html` 三層(開啟 / `-done` / `-dwell`),站名 `3dchesscodex`;`-done` 在 `app.js` 的 `render()` 以 game 物件身分去重(同一局只發一次)。hfpc-play-stats 的 `NAMES` 已登顯示名。
 - ✅ **收起選單已上線(0914,sw v26)**:見「功能」段。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fold.mjs`。
+- ✅ **⛶ 放大真的放大 + 桌機 ⛶ + 手機橫向自動滿版(0914,sw v27)**:`body.fit-play`(app.js `syncFitPlay`/`fitBoard`,styles.css 檔尾)—— 沉浸或手機橫向時整頁一屏、棋盤用真投影框逐步縮放到剛好裝進棋盤區(`--fit-board-w`),工具列橫向改直排在右;`#mfsExit` 是看得見的出口(同一個 toggle);「☰ 選單」= `body.panels-open` 暫回一般版面。線上驗法:`CHECK_URL=https://3dchesscodex.pages.dev node scripts/check-fit.mjs`。
 
 ---
 GitHub:`summer09201017-cloud/3d-chess-co`。本 README 2026-09-03 補(此前文件沒寫網址,作品集對賬只能靠名字猜到本 repo)。
