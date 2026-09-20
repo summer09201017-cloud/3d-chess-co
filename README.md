@@ -30,6 +30,13 @@
   按下切 `body.menu-folded`:CSS 藏掉 `aside.control-column`(對戰設定/對局資訊/棋盤顯示/存檔區/步數回看)與標題文字 `.hero-copy`,`.layout` 變單欄、`.board` 上限 720→840px(桌機棋盤真的變大;手機本來就滿寬,好處是頁面短很多)。
   重新開局/每日殘局那排鈕與棋盤下方工具列(提示/悔棋/上一步…)都留著。狀態記 localStorage `3d-chess-co.menuFolded`(讀寫包 try/catch),
   `index.html` `<body>` 開頭一支小 script 第一幀先套 class 不閃;切換後補發一次 `resize`。`aria-expanded` 跟著切。驗收:`scripts/check-fold.mjs`。
+- 🎥 **視角工具列跟其他五款 3D 棋類長一樣**(v30,2026-09-20,使用者拍板「兩邊都做,六款 3D 棋類的視角工具列長一樣:預設三段 + 滑桿微調 + 換邊 + 重置」):
+  `view-kit.js` **逐字複製自** skill `board3d-kit/assets/view-kit.js`(**不要改複本**,要改就改 skill 那份再抄回來),`app.js` init 段用 `mountViewKit(#viewKitMount, adapter)` 掛進「棋盤顯示」卡。
+  內容:預設三段(斜俯視 58° / 正俯視 88° / 對局視角 34°)+ 水平旋轉 0–359° + 俯視角度 20–88° 兩條滑桿 + 🔃 換邊(轉 180°,兩人同機)+ 🎯 重置視角。
+  ★ 本站相機是 CSS `rotateX`(tilt,0° = 正上方往下看),kit 的共用語彙是「俯視角度 pitch」(90° = 正上方)⇒ **pitch = 90 − tilt**(`tiltToPitch/pitchToTilt`);
+  state/存檔仍存 tilt,範圍 20–76 改成 **2–70**(= 俯視 88°–20°),預設 58 → **56** 好讓開場/重置剛好是「對局視角」那顆亮。
+  舊的「向左/向右轉 45°」鈕與 `#rotationRange/#tiltRange/#rotateResetButton` 拆掉(併進滑桿);2D 模式時俯視滑桿與三顆預設灰掉,換邊/水平旋轉照用。
+  存檔:kit 滑桿只有連續 `input` ⇒ `set()` 後 400ms 去抖 `saveAuto()`。驗收:`scripts/browser-check.mjs` 末段(真點擊三顆預設/換邊/重置,等滑桿到位不賭毫秒)。
 
 ## 檔案
 
@@ -37,10 +44,11 @@
 |---|---|
 | `index.html` / `styles.css` | 殼層與版面(`#verTag` 版本簡歷在 index.html) |
 | `app.js` | 接線、3D 棋盤、對局流程 |
+| `view-kit.js` | 六站共用「視角工具列」(預設三段/兩條滑桿/換邊/重置),**逐字複製自 skill board3d-kit/assets,不要在這裡改** |
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v28"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914))) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v30"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` / `test/ai.mjs` | `npm test`:每日殘局資料檢查 + 提示品質/AI 可走 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |
@@ -85,3 +93,4 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 
 ---
 GitHub:`summer09201017-cloud/3d-chess-co`。本 README 2026-09-03 補(此前文件沒寫網址,作品集對賬只能靠名字猜到本 repo)。
+- ✅ **🎥 視角工具列統一(view-kit)已上線(0920,sw v30 / verTag v30)**:見「功能」段。六站同修(3D-Xiangqi / 3d-chinese-chess / 3D-Chess / xiangqi-arena / gomoku3d 各自接線),共用檔正本在 skill `board3d-kit/assets/view-kit.js`。

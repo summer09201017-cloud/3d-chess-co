@@ -1028,3 +1028,16 @@ body.fit-play:not(.panels-open).tools-folded .status-card {
   background: rgba(9, 15, 19, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); pointer-events: none;
 }
 body.fit-play:not(.panels-open).tools-folded .status-text { font-size: 12px; line-height: 1.35; }
+
+/* 🎥 0920 view-kit(六站共用視角工具列,view-kit.js 自帶版面;這裡只套本站配色 + 2D 模式灰掉) */
+.view-kit-mount { margin: 12px 0 8px; }
+.view-kit {
+  --vk-accent: #7dd3fc;
+  --vk-accent-fg: #08111f;
+  --vk-line: rgba(147, 197, 253, 0.28);
+  --vk-bg: rgba(15, 23, 42, 0.95);
+  color: var(--text);
+}
+.view-kit .vk-title { color: var(--muted); }
+.view-kit .vk-btn:disabled,
+.view-kit input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }

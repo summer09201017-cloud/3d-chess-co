@@ -1,6 +1,7 @@
 import { Chess } from "./vendor/chess.js";
 import { DIFFICULTY_PRESETS, getBestMove, getHintMove } from "./ai.js";
 import { dailyPuzzleKey, puzzlesForDate } from "./puzzles.js";
+import { mountViewKit } from "./view-kit.js";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const AUTO_SAVE_KEY = "3d-chess-co:auto-save:v1";
@@ -8,7 +9,14 @@ const SLOT_PREFIX = "3d-chess-co:slot:";
 const SAVE_SLOT_IDS = [1, 2, 3];
 const DEFAULT_BOARD_MODE = "3d";
 const DEFAULT_CAMERA_ROTATION = 0;
-const DEFAULT_CAMERA_TILT = 58;
+/* 0920 六站視角工具列統一(view-kit):共用語彙是「俯視角度 pitch」(90° = 正上方往下看),
+   本站 CSS 吃的是 rotateX 的 tilt(0° = 正上方往下看)⇒ pitch = 90 − tilt。
+   預設 58 → 56,好讓開場/重置剛好落在共用預設「對局視角」(俯視 34°)那一顆上。 */
+const DEFAULT_CAMERA_TILT = 56;
+const TILT_MIN = 2;    // = 俯視角度 88°(正俯視)
+const TILT_MAX = 70;   // = 俯視角度 20°(共用滑桿下限)
+const tiltToPitch = (tilt) => 90 - tilt;
+const pitchToTilt = (pitch) => 90 - pitch;
 
 const boardElement = document.querySelector("#board");
 const boardSceneElement = document.querySelector("#boardScene");
@@ -25,11 +33,9 @@ const continueFromHereButtonElement = document.querySelector("#continueFromHereB
 const jumpStartButtonElement = document.querySelector("#jumpStartButton");
 const difficultySelectElement = document.querySelector("#difficultySelect");
 const displayModeSelectElement = document.querySelector("#displayModeSelect");
-const rotateLeftButtonElement = document.querySelector("#rotateLeftButton");
-const rotateResetButtonElement = document.querySelector("#rotateResetButton");
-const rotateRightButtonElement = document.querySelector("#rotateRightButton");
-const rotationRangeElement = document.querySelector("#rotationRange");
-const tiltRangeElement = document.querySelector("#tiltRange");
+const viewKitMountElement = document.querySelector("#viewKitMount");
+let viewKit = null;                       // mountViewKit() 回傳的把手(init 時掛上)
+const viewChangeListeners = new Set();    // view-kit adapter.onChange 的訂閱者(拖曳/切模式/讀檔時讓滑桿跟手)
 const viewHintElement = document.querySelector("#viewHint");
 const turnValueElement = document.querySelector("#turnValue");
 const modeValueElement = document.querySelector("#modeValue");
@@ -89,7 +95,7 @@ function applyBoardView() {
   /* v27 fit-play 直向:棋盤被寬度卡住,俯角越大投影越扁 ⇒ 沉浸/直向時把俯角上限壓到 40°(只影響畫面,不動 state/存檔;
      實測 390 寬:52° 投影高 192px、44° 226px、40° ~280px) */
   const fitPortrait = fitPlayActive() && window.innerHeight > window.innerWidth;
-  const effectiveTilt = state.boardMode === "3d" ? Math.min(clamp(state.cameraTilt, 20, 76), fitPortrait ? 40 : 76) : 0;
+  const effectiveTilt = state.boardMode === "3d" ? Math.min(clamp(state.cameraTilt, TILT_MIN, TILT_MAX), fitPortrait ? 40 : TILT_MAX) : 0;
   const normalizedRotation = normalizeRotation(state.cameraRotation);
 
   boardElement.classList.toggle("three-d", state.boardMode === "3d");
@@ -206,14 +212,17 @@ function syncFitPlay() {
 
 function syncViewControls() {
   const normalizedRotation = Math.round(normalizeRotation(state.cameraRotation)) % 360;
-  const clampedTilt = Math.round(clamp(state.cameraTilt, 20, 76));
+  const pitch = Math.round(tiltToPitch(clamp(state.cameraTilt, TILT_MIN, TILT_MAX)));
 
   displayModeSelectElement.value = state.boardMode;
-  rotationRangeElement.value = String(normalizedRotation);
-  tiltRangeElement.value = String(clampedTilt);
-  tiltRangeElement.disabled = state.boardMode !== "3d";
+  /* 0920 view-kit:滑桿/預設鈕由 view-kit 自己畫,這裡只通知它「相機變了」(拖曳、切 2D/3D、讀檔都走這條) */
+  for (const cb of viewChangeListeners) { try { cb(); } catch (error) { console.error(error); } }
+  if (viewKit) {
+    const is3d = state.boardMode === "3d";
+    for (const el of viewKit.el.querySelectorAll('[data-vk-range="pitch"], [data-vk-view]')) el.disabled = !is3d;
+  }
   viewHintElement.textContent = state.boardMode === "3d"
-    ? `目前為 3D 模式，可拖曳棋盤做 360 度旋轉。水平 ${normalizedRotation}°，俯視 ${clampedTilt}°。`
+    ? `目前為 3D 模式，可拖曳棋盤做 360 度旋轉。水平 ${normalizedRotation}°，俯視角度 ${pitch}°。`
     : `目前為 2D 模式，可 360 度旋轉棋盤方向；切回 3D 時會保留原本立體角度。`;
 }
 
@@ -225,7 +234,7 @@ function updateBoardView({
 } = {}) {
   state.boardMode = boardMode === "2d" ? "2d" : "3d";
   state.cameraRotation = normalizeRotation(cameraRotation);
-  state.cameraTilt = clamp(cameraTilt, 20, 76);
+  state.cameraTilt = clamp(cameraTilt, TILT_MIN, TILT_MAX);
 
   applyBoardView();
   syncViewControls();
@@ -877,7 +886,7 @@ function createSavePayload({ useVisiblePly = true } = {}) {
     difficulty: state.difficulty,
     boardMode: state.boardMode,
     cameraRotation: normalizeRotation(state.cameraRotation),
-    cameraTilt: clamp(state.cameraTilt, 20, 76),
+    cameraTilt: clamp(state.cameraTilt, TILT_MIN, TILT_MAX),
     moveCount: visibleMoves.length,
     moves: visibleMoves,
   };
@@ -1143,7 +1152,7 @@ function restoreFromPayload(payload) {
   state.displayPly = null;
   state.boardMode = payload.boardMode === "2d" ? "2d" : DEFAULT_BOARD_MODE;
   state.cameraRotation = Number.isFinite(payload.cameraRotation) ? normalizeRotation(payload.cameraRotation) : DEFAULT_CAMERA_ROTATION;
-  state.cameraTilt = Number.isFinite(payload.cameraTilt) ? clamp(payload.cameraTilt, 20, 76) : DEFAULT_CAMERA_TILT;
+  state.cameraTilt = Number.isFinite(payload.cameraTilt) ? clamp(payload.cameraTilt, TILT_MIN, TILT_MAX) : DEFAULT_CAMERA_TILT;
   clearSelection();
 }
 
@@ -1318,14 +1327,6 @@ function evaluateDaily() {
       + (r.solvedCount >= total ? " —— 今天全解完了,明天有新的一組!" : "(按「📅 每日殘局」接下一題)"), 15000);
     render();
   }
-}
-
-function rotateBoardBy(delta) {
-  updateBoardView({
-    cameraRotation: state.cameraRotation + delta,
-    persist: true,
-  });
-  renderStatus();
 }
 
 function resetBoardView() {
@@ -1598,39 +1599,28 @@ function registerEvents() {
     renderStatus();
   });
 
-  rotateLeftButtonElement.addEventListener("click", () => rotateBoardBy(-45));
-  rotateResetButtonElement.addEventListener("click", resetBoardView);
-  rotateRightButtonElement.addEventListener("click", () => rotateBoardBy(45));
-
-  rotationRangeElement.addEventListener("input", () => {
-    updateBoardView({
-      cameraRotation: Number(rotationRangeElement.value),
+  /* 🎥 0920 六站視角工具列統一(view-kit.js 複製自 board3d-kit/assets,不要改複本):
+     預設三段(斜俯視 58° / 正俯視 88° / 對局視角 34°)+ 水平旋轉 0–359° + 俯視角度 20–88° + 🔃 換邊 + 🎯 重置視角。
+     本站相機是 CSS rotateX/rotateZ:kit 的 pitch(90° = 正上方)= 90 − tilt(rotateX);yaw 直接等於 cameraRotation。
+     存檔:kit 的滑桿只有連續 input(舊滑桿放手才 change)⇒ 每次 set 後 400ms 去抖存一次自動存檔。 */
+  if (viewKitMountElement) {
+    let persistTimer = 0;
+    const schedulePersist = () => { clearTimeout(persistTimer); persistTimer = setTimeout(() => saveAuto(), 400); };
+    viewKit = mountViewKit(viewKitMountElement, {
+      get: () => ({
+        yaw: normalizeRotation(state.cameraRotation),
+        pitch: tiltToPitch(clamp(state.cameraTilt, TILT_MIN, TILT_MAX)),
+      }),
+      set: ({ yaw, pitch }) => {
+        updateBoardView({ cameraRotation: yaw, cameraTilt: pitchToTilt(pitch) });
+        renderStatus();
+        schedulePersist();
+      },
+      reset: () => resetBoardView(),
+      onChange: (cb) => { viewChangeListeners.add(cb); return () => viewChangeListeners.delete(cb); },
     });
-    renderStatus();
-  });
-
-  rotationRangeElement.addEventListener("change", () => {
-    updateBoardView({
-      cameraRotation: Number(rotationRangeElement.value),
-      persist: true,
-    });
-    renderStatus();
-  });
-
-  tiltRangeElement.addEventListener("input", () => {
-    updateBoardView({
-      cameraTilt: Number(tiltRangeElement.value),
-    });
-    renderStatus();
-  });
-
-  tiltRangeElement.addEventListener("change", () => {
-    updateBoardView({
-      cameraTilt: Number(tiltRangeElement.value),
-      persist: true,
-    });
-    renderStatus();
-  });
+    syncViewControls();   // 2D 模式時先把俯視相關控件灰掉
+  }
 
   boardSceneElement.addEventListener("pointerdown", handleBoardPointerDown);
   boardSceneElement.addEventListener("pointermove", handleBoardPointerMove);

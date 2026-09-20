@@ -164,6 +164,62 @@ const second = await page.evaluate(() => {
 });
 ok(second.n === 1 && second.solvedCount === 1, "再按每日鈕=接第 2 題(已解 1 題)", JSON.stringify(second));
 ok(second.line.includes("第 2/5 題"), "狀態行顯示第 2/5 題", second.line);
+/* 🎥 0920 六站統一視角工具列(view-kit):真點擊驗三件事——
+   ① 三顆預設鈕字面對(斜俯視／正俯視／對局視角)② 🔃 換邊後水平旋轉滑桿 = 180°、state 也是 180
+   ③ 正俯視後俯視角度滑桿 = 88°、那顆鈕亮起、棋盤 CSS rotateX = 2deg(本站 tilt = 90 − pitch)④ 🎯 重置回 0° / 34°(對局視角亮) */
+ok(await page.locator(".view-kit").count() === 1, "有 view-kit 視角工具列");
+const vkLabels = await page.locator("[data-vk-view]").allTextContents();
+ok(vkLabels.join("|") === "斜俯視|正俯視|對局視角", "預設視角 3 顆、字面正確", vkLabels.join("|"));
+ok(await page.locator("[data-vk-range='yaw']").count() === 1 && await page.locator("[data-vk-range='pitch']").count() === 1,
+  "水平旋轉 / 俯視角度 兩條滑桿都在");
+await page.click("[data-vk-reset]");
+await page.waitForTimeout(250);
+/* 補間 320ms 靠 rAF;無頭瀏覽器的 rAF 會忽快忽慢(canvas-playwright-verify 那條老坑)⇒ 等它真的到位,不賭固定毫秒,但記下花了多久 */
+const vkWait = async (fn, label) => {
+  const t0 = Date.now();
+  let hit = true;
+  await page.waitForFunction(fn, null, { timeout: 4000 }).catch(() => { hit = false; });
+  return { hit, ms: Date.now() - t0, label };
+};
+await page.click("[data-vk-flip]");
+const flipWait = await vkWait(() => document.querySelector("[data-vk-range='yaw']").value === "180", "flip");
+const afterFlip = await page.evaluate(() => ({
+  yaw: document.querySelector("[data-vk-range='yaw']").value,
+  rot: Math.round(window.__chess.state.cameraRotation),
+}));
+ok(flipWait.hit && afterFlip.yaw === "180" && afterFlip.rot === 180,
+  `🔃 換邊後水平旋轉滑桿 = 180°(state 同步;補間到位 ${flipWait.ms}ms)`, JSON.stringify(afterFlip));
+ok(flipWait.ms < 1500, "換邊補間 1.5 秒內到位(不卡主執行緒)", flipWait.ms + "ms");
+await page.click("[data-vk-view='flat']");
+await vkWait(() => document.querySelector("[data-vk-range='pitch']").value === "88", "flat");
+await page.waitForTimeout(60);
+const afterFlat = await page.evaluate(() => ({
+  pitch: document.querySelector("[data-vk-range='pitch']").value,
+  pressed: document.querySelector("[data-vk-view='flat']").getAttribute("aria-pressed"),
+  rx: document.querySelector("#board").style.getPropertyValue("--board-rotate-x").trim(),
+  tilt: Math.round(window.__chess.state.cameraTilt),
+}));
+ok(afterFlat.pitch === "88" && afterFlat.pressed === "true" && afterFlat.rx === "2deg" && afterFlat.tilt === 2,
+  "正俯視:俯視角度滑桿 88°、鈕亮起、棋盤 rotateX = 2deg(不翻不跳)", JSON.stringify(afterFlat));
+await page.click("[data-vk-view='top']");
+await vkWait(() => document.querySelector("[data-vk-range='pitch']").value === "58", "top");
+await page.waitForTimeout(60);
+const afterTop = await page.evaluate(() => ({
+  pitch: document.querySelector("[data-vk-range='pitch']").value,
+  rx: document.querySelector("#board").style.getPropertyValue("--board-rotate-x").trim(),
+}));
+ok(afterTop.pitch === "58" && afterTop.rx === "32deg", "斜俯視:俯視角度 58° ⇒ rotateX 32deg", JSON.stringify(afterTop));
+await page.click("[data-vk-reset]");
+await page.waitForTimeout(300);
+const afterReset = await page.evaluate(() => ({
+  yaw: document.querySelector("[data-vk-range='yaw']").value,
+  pitch: document.querySelector("[data-vk-range='pitch']").value,
+  sit: document.querySelector("[data-vk-view='sit']").getAttribute("aria-pressed"),
+}));
+ok(afterReset.yaw === "0" && afterReset.pitch === "34" && afterReset.sit === "true",
+  "🎯 重置視角回 0° / 34°,「對局視角」亮起", JSON.stringify(afterReset));
+const vkBox = await page.locator(".view-kit").boundingBox();
+ok(vkBox && vkBox.width > 100 && vkBox.height > 100, "工具列真的畫出來(有寬高)", JSON.stringify(vkBox));
 ok(errors.length === 0, "整場零 pageerror", errors.join(" | ").slice(0, 200));
 
 await browser.close();
