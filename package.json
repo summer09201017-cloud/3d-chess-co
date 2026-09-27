@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "serve": "py -m http.server 4174",
-    "test": "node test/daily.mjs && node test/ai.mjs"
+    "test": "node test/daily.mjs && node test/ai.mjs",
+    "voice": "node scripts/gen-voice.mjs --phrases js/voicePhrases.js --out voice --sw sw.js"
   },
   "dependencies": {
     "chess.js": "^1.4.0"
   },
   "devDependencies": {
+    "msedge-tts": "^2.0.8",
     "playwright-core": "^1.62.1"
   }
 }

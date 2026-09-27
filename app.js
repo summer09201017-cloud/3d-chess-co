@@ -71,6 +71,62 @@ const state = {
 
 const boardSquares = new Map();
 
+/* ═══ 🐾 動物對手(2026-09-28,skill animal-opponent-kit;本站是 CSS 斜視棋盤 ⇒ 透明 WebGL 小窗版,接線在 js/opponent.js)═══
+   引擎 js/animals.js、人聲 js/voice.js、js/three-shim.js 與 skill assets 同一份(不在這裡改);three r128 從 CDN 載成全域、import map 轉給模組。
+   dynamic import():CDN 沒載到(離線第一次開 / 舊瀏覽器不吃 import map)⇒ pet 留 null,棋照下、零錯誤。
+   反應跟 AI 流程同一個分岔:牠開算 think(人聲每三手)/ 走完 place・吃子 reach・將你的軍 hop+「將軍」/ 你吃牠的子・將牠的軍 gasp+「哇」/
+   將死 win・被將死 lose・和局 shrug(一局一次,用 state.game 身分去重,跟 psDone 同一招)。純觀感,不進規則、不進 AI。 */
+let pet = null;
+const petCanvasElement = document.querySelector("#petCanvas");
+const PET_LEVEL = { easy: "rabbit", medium: "cat", hard: "bear" };
+function petKind() { return state.daily ? "owl" : (PET_LEVEL[state.difficulty] || "cat"); }
+async function initPet() {
+  if (!petCanvasElement || pet) return;
+  try {
+    const [{ Opponent }, { createVoice }] = await Promise.all([import("./js/opponent.js"), import("./js/voice.js")]);
+    const voice = createVoice({ muted: () => false });   // 這站沒有 🔊 音效開關 ⇒ 只看 🐾 三段
+    pet = new Opponent({ canvas: petCanvasElement, wrap: document.querySelector(".scene-wrap"), board: boardElement, voice });
+    if (window.__chess) window.__chess.voice = voice;   // pet 走 __chess 的 getter(下面那行)
+    const opts = document.querySelectorAll("#petRow .pet-opt");
+    const paint = () => opts.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pet === pet.mode)));
+    opts.forEach((b) => b.addEventListener("click", () => { pet.setMode(b.dataset.pet); paint(); syncPet(); }));
+    paint();
+    boardSceneElement.addEventListener("pointerdown", () => pet.noteInput());
+    document.addEventListener("keydown", () => pet.noteInput());
+    if (state.game.isGameOver()) pet.endedFor = state.game;   // 開場讀到的自動存檔已經結束:別一坐下就慶祝
+    syncPet();
+  } catch (e) {
+    pet = null;   // 沒有 three = 沒有動物(只留一行 warn,不炸遊戲)
+    console.warn("🐾 動物對手沒載起來(離線第一次開 / 舊瀏覽器?)", e);
+  }
+}
+/** 每次 render 對一次:誰坐、等不等你、名牌、一局結束的反應(一局一次) */
+function syncPet() {
+  const chip = document.querySelector("#aiChip");
+  if (!pet) { if (chip) chip.textContent = "黑方：AI"; return; }
+  pet.seat(petKind());
+  const over = state.game.isGameOver();
+  pet.waiting = !over && !state.aiThinking && !isViewingHistory() && state.game.turn() === "w";
+  document.body.classList.toggle("pet-on", pet.on);
+  if (chip) chip.textContent = pet.on ? `黑方：${pet.emoji} ${pet.name}` : "黑方：AI";
+  if (over && pet.endedFor !== state.game) {
+    pet.endedFor = state.game;
+    if (state.game.isCheckmate()) { const w = state.game.turn() === "w"; pet.react(w ? "win" : "lose", w ? "win" : "lose", 250); }
+    else pet.react("shrug", "draw", 250);
+  }
+}
+/** 你走完一手:吃了牠的子、或將了牠的軍 ⇒ 牠「哇」一聲(放在 maybeRunAiMove 之後,才不會被 think 蓋掉) */
+function petAfterPlayerMove(captured) {
+  if (!pet || !pet.kind || state.game.isGameOver()) return;
+  if (captured || state.game.isCheck()) pet.react("gasp", "wow");
+}
+/** 牠走完一手:將你的軍 ⇒ 跳起來喊「將軍」;吃子 ⇒ 伸手抓;不然只是放子 */
+function petAfterAiMove(captured) {
+  if (!pet || !pet.kind || state.game.isGameOver()) return;
+  if (state.game.isCheck()) pet.react("hop", "check");
+  else pet.react(captured ? "reach" : "place", null);
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -101,6 +157,7 @@ function applyBoardView() {
   boardElement.classList.toggle("three-d", state.boardMode === "3d");
   boardElement.classList.toggle("two-d", state.boardMode === "2d");
   boardSceneElement.classList.toggle("is-dragging", Boolean(state.dragState));
+  if (pet) { pet.dragging = Boolean(state.dragState); if (!state.dragState) pet.dirty = true; }   // 🐾 拖曳中小窗不量版面,放手才量
   boardElement.style.setProperty("--board-rotate-x", `${effectiveTilt}deg`);
   boardElement.style.setProperty("--board-rotate-z", `${continuousRotation(normalizedRotation)}deg`);
   /* v29:拖曳中**不量**。v27 在這裡同步跑 fitBoard(300 個 getBoundingClientRect × 5 輪 + 兩個 setTimeout),
@@ -394,6 +451,7 @@ function cancelAiThink() {
 
   state.aiTimerId = 0;
   state.aiThinking = false;
+  if (pet) pet.cancel();   // 🐾 悔棋 / 重開:收掉手托腮
 }
 
 function setMessage(text, duration = 2400) {
@@ -999,6 +1057,7 @@ function render() {
   renderStatus();
   renderHistory();
   renderControls();
+  syncPet();   // 🐾
 }
 
 function handleSquareClick(squareName) {
@@ -1033,6 +1092,7 @@ function handleSquareClick(squareName) {
   }
 
   if (state.selectedSquare && state.legalTargets.includes(squareName)) {
+    const victim = state.game.get(squareName);   // 🐾 吃子了嗎(要在 move 之前看)
     const move = state.game.move({
       from: state.selectedSquare,
       to: squareName,
@@ -1052,6 +1112,7 @@ function handleSquareClick(squareName) {
     render();
     evaluateDaily();     // 📅 白方這一步若將死=記今天的成績
     maybeRunAiMove();
+    petAfterPlayerMove(Boolean(victim));   // 🐾
     return;
   }
 
@@ -1076,10 +1137,12 @@ function maybeRunAiMove() {
   cancelAiThink();
   state.aiThinking = true;
   render();
+  if (pet) pet.think();   // 🐾 手托腮、頭歪(人聲每三手一次)
 
   state.aiTimerId = window.setTimeout(() => {
     const preset = DIFFICULTY_PRESETS[state.difficulty];
     const bestMove = getBestMove(state.game, preset);
+    const victim = bestMove ? state.game.get(bestMove.to) : null;   // 🐾
 
     if (bestMove) {
       state.game.move({
@@ -1094,6 +1157,7 @@ function maybeRunAiMove() {
     state.displayPly = null;
     saveAuto();
     render();
+    petAfterAiMove(Boolean(victim));   // 🐾
   }, DIFFICULTY_PRESETS[state.difficulty].thinkTime);
 }
 
@@ -1666,4 +1730,5 @@ function boot() {
 boot();
 
 // 測試掛勾(驗收腳本用;艦隊慣例)——真人操作不經過它
-window.__chess = { state, startDailyGame, whiteMoveCount, handleSquareClick };
+window.__chess = { state, startDailyGame, whiteMoveCount, handleSquareClick, startNewGame, get pet() { return pet; } };
+initPet();   // 🐾 最後才載(dynamic import;three CDN 沒到就沒動物)

@@ -1041,3 +1041,23 @@ body.fit-play:not(.panels-open).tools-folded .status-text { font-size: 12px; lin
 .view-kit .vk-title { color: var(--muted); }
 .view-kit .vk-btn:disabled,
 .view-kit input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ══════════ 🐾 動物對手(2026-09-28,skill animal-opponent-kit)══════════
+   本站是 CSS 斜視棋盤(沒有 three 場景)⇒ 牠住在一張透明 WebGL 小窗 #petCanvas 裡,疊在棋盤遠端正上方;
+   位置 / 大小由 js/opponent.js 每次版面變時量棋盤投影框(含棋子與棋名標籤)後設 inline style:上面有空位放正上方、
+   沒有(手機橫向 fit-play)放右上、都沒有就藏。小窗 z-index 在 .board-scene 底下 ⇒ 牠的下半身被桌子遮住 = 坐在桌子後面。 */
+.scene-wrap .board-scene { position: relative; z-index: 1; }
+.pet-canvas { position: absolute; z-index: 0; pointer-events: none; display: block; }
+.pet-canvas[hidden] { display: none; }
+/* 直向手機:棋盤寬度卡住、上面本來只剩幾十 px ⇒ 牠坐著時舞台上緣多留 92px(一般長頁本來就會捲;fit-play 一屏版面不留,改放右邊或藏) */
+@media (max-width: 720px) {
+  body.pet-on:not(.fit-play) .scene-wrap { padding-top: 100px; }
+}
+.pet-field .pet-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.pet-field .pet-opt {
+  flex: 1 1 0; min-height: 40px; padding: 6px 8px; border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.3); background: rgba(125, 211, 252, 0.08); color: var(--text);
+  font: inherit; font-size: 0.86rem; cursor: pointer;
+}
+.pet-field .pet-opt[aria-pressed="true"] { background: rgba(125, 211, 252, 0.3); border-color: rgba(125, 211, 252, 0.8); font-weight: 700; }
+.pet-field .pet-note { margin: 0; }

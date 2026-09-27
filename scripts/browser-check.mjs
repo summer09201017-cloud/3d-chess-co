@@ -220,6 +220,134 @@ ok(afterReset.yaw === "0" && afterReset.pitch === "34" && afterReset.sit === "tr
   "🎯 重置視角回 0° / 34°,「對局視角」亮起", JSON.stringify(afterReset));
 const vkBox = await page.locator(".view-kit").boundingBox();
 ok(vkBox && vkBox.width > 100 && vkBox.height > 100, "工具列真的畫出來(有寬高)", JSON.stringify(vkBox));
+
+/* ══════ 🐾 動物對手(2026-09-28,skill animal-opponent-kit;本站是 CSS 斜視 ⇒ 透明 WebGL 小窗版)══════
+   檔案側對賬 → 引擎與 skill 同一份 → 真點擊三段開關 → 坐對面(小窗在棋盤投影框正上方、不擋點擊)/ 鐵則遍歷 / 頭在小窗裡 ×3 視口
+   → 走一手等牠回手(figs.log 有 think + place)→ 姿勢手動推時間 → 三段開關 → 人聲 runtime → 每日 = 🦉 */
+console.log("—— 🐾 動物對手 ——");
+{
+  const fs = await import("node:fs");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath, pathToFileURL } = await import("node:url");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const { VOICE_FILES } = await import(pathToFileURL(join(root, "js", "voicePhrases.js")).href);
+  const vdir = join(root, "voice");
+  const mp3 = fs.existsSync(vdir) ? fs.readdirSync(vdir).filter((f) => f.endsWith(".mp3")).sort() : [];
+  const want = [...VOICE_FILES].sort();
+  ok(mp3.join() === want.join(), `🗣 voice/ 有 ${mp3.length} 支 mp3,跟詞庫 ${want.length} 句一一對應`);
+  const sw = fs.readFileSync(join(root, "sw.js"), "utf8");
+  const missing = mp3.filter((f) => !sw.includes(`"./voice/${f}"`));
+  ok(missing.length === 0 && sw.includes('"./voice/manifest.json"'), `🗣 sw.js 清單含 manifest + 每支 mp3(gen-voice 照目錄重生)${missing.length ? ":漏 " + missing.join(",") : ""}`);
+  ok(sw.includes("three.js/r128/three.min.js") && ["three-shim", "animals", "voice", "opponent", "voicePhrases"].every((n) => sw.includes(`"./js/${n}.js"`)), "🐾 sw.js 清單含 three CDN + js 五支");
+  let manifestOk = false;
+  try { const mf = JSON.parse(fs.readFileSync(join(vdir, "manifest.json"), "utf8")); manifestOk = mp3.length > 0 && mp3.every((f) => mf[f.replace(/\.mp3$/, "")] === "voice/" + f); } catch { /* 沒烤 */ }
+  ok(manifestOk, "🗣 manifest.json 的鍵值跟目錄一致");
+  const tiny = mp3.filter((f) => fs.statSync(join(vdir, f)).size < 2048);
+  ok(tiny.length === 0, `🗣 每支 mp3 > 2KB(空檔 = 烤失敗)${tiny.length ? ":" + tiny.join(",") : ""}`);
+  const webSpeech = [...fs.readdirSync(join(root, "js")).map((f) => "js/" + f), "app.js"].filter((f) => f.endsWith(".js") && fs.readFileSync(join(root, f), "utf8").includes("speech" + "Synthesis"));
+  ok(webSpeech.length === 0, `🗣 沒有 Web Speech 機器聲${webSpeech.length ? ":" + webSpeech.join(",") : ""}`);
+  const kit = join(process.env.USERPROFILE || process.env.HOME || "", ".claude", "skills", "animal-opponent-kit", "assets");
+  if (fs.existsSync(kit)) {
+    const drift = [["animals.js", "animals.js"], ["voice.js", "voice.js"], ["three-shim.js", "three-global-shim.js"]]
+      .filter(([site, asset]) => fs.readFileSync(join(root, "js", site), "utf8") !== fs.readFileSync(join(kit, asset), "utf8")).map(([site]) => site);
+    ok(drift.length === 0, `🐾 引擎三支與 skill 同一份${drift.length ? ":漂移 " + drift.join(",") : ""}`);
+  }
+}
+await page.setViewportSize({ width: 1100, height: 800 });
+await page.click("#newGameButton");
+await page.waitForFunction(() => window.__chess.pet && window.__chess.pet.kind === "cat" && !window.__chess.state.daily, null, { timeout: 15000 });
+await page.click('#petRow [data-pet="voice"]');
+await page.waitForTimeout(700);
+ok(await page.locator('#petRow .pet-opt[aria-pressed="true"]').getAttribute("data-pet") === "voice", "🐾 對戰設定有三段動物開關,按了會亮");
+/* 每日流程把頁面捲到底了:棋盤在視窗外 elementFromPoint 一律 null ⇒ 先把舞台捲進視窗(真人也是看著棋盤點) */
+await page.evaluate(() => document.querySelector(".scene-wrap").scrollIntoView({ block: "start" }));
+await page.waitForTimeout(700);
+const hudHits = (box) => [...document.querySelectorAll("#mfsFull, #mfsExit, .board-toolbar, .status-card, .hero-card, .fold-bar, .control-column")].filter((el) => {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && !(r.right < box.l || r.left > box.r || r.bottom < box.t || r.top > box.b);
+}).map((el) => el.id || el.className);
+const petProbe = () => page.evaluate((fn) => {
+  const hits = eval(fn);
+  const P = window.__chess.pet, f = P.figure;
+  let neck = 0, eyes = 0, ears = 0, brows = 0, mouth = 0;
+  if (f) f.group.traverse((o) => { if (o.userData.neck) neck++; if (o.userData.eye) eyes++; if (o.userData.ear) ears++; if (o.userData.brow) brows++; if (o.userData.mouth) mouth++; });
+  const b = document.querySelector("#board").getBoundingClientRect();
+  const p = P.probe();
+  // 小窗跟棋盤本體(格子)重疊多少:只准壓進上緣一點(牠的下半身被桌子遮住),不准蓋到格子中間
+  const ov = p.canvas ? Math.max(0, Math.min(p.canvas.b, b.bottom) - Math.max(p.canvas.t, b.top)) : 0;
+  const centerSq = document.querySelector('[data-square="e4"]'), farSq = document.querySelector('[data-square="e8"]');
+  const hitOf = (el) => { const r = el.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t ? (t.closest("#board") ? "board" : t.id || t.className) : "none"; };
+  return { ...p, neck, eyes, ears, brows, mouth, chip: document.querySelector("#aiChip").textContent, petOn: document.body.classList.contains("pet-on"),
+    capsule: !!window.THREE.CapsuleGeometry, boardTop: Math.round(b.top), overlapPx: Math.round(ov), hits: p.headBox ? hits(p.headBox) : [],
+    clickCenter: hitOf(centerSq), clickFar: hitOf(farSq) };
+}, `(${hudHits.toString()})`);
+const pet0 = await petProbe();
+ok(pet0.figure && pet0.visible && pet0.kind === "cat" && pet0.placement === "top", `🐾 標準 ⇒ 🐱 橘貓坐在棋盤對面(小窗 ${JSON.stringify(pet0.canvas)},放 ${pet0.placement})`);
+ok(pet0.capsule, "🐾 three-shim 補上了 r128 沒有的 CapsuleGeometry");
+ok(pet0.neck === 1 && pet0.eyes === 2 && pet0.ears === 2 && pet0.brows === 2 && pet0.mouth === 1, "🐾 人物鐵則遍歷:脖子 1、眼 2、耳 2、眉 2、嘴 1");
+ok(pet0.head.inside, `🐾 桌機:頭頂在小窗裡(NDC ${pet0.head.x}, ${pet0.head.y})`);
+ok(pet0.canvas.b <= pet0.boardTop + 8 && pet0.overlapPx <= 8, `🐾 小窗在棋盤本體上方、不蓋格子(小窗底 ${pet0.canvas.b} vs 棋盤頂 ${pet0.boardTop},重疊 ${pet0.overlapPx}px)`);
+ok(pet0.clickCenter === "board" && pet0.clickFar === "board", `🐾 小窗不擋點擊(e4 / e8 中心 elementFromPoint = ${pet0.clickCenter} / ${pet0.clickFar})`);
+ok(pet0.hits.length === 0, `🐾 桌機:牠的臉沒被 HUD / 鈕蓋到${pet0.hits.length ? ":" + pet0.hits.join(",") : ""}`);
+ok(/^黑方：🐱/.test(pet0.chip) && pet0.petOn, `🐾 名牌帶動物(${pet0.chip})、body.pet-on`);
+await page.setViewportSize({ width: 844, height: 390 });
+await page.waitForTimeout(1200);
+const petLand = await petProbe();
+ok(!petLand.visible || (petLand.head.inside && petLand.overlapPx <= 8 && petLand.hits.length === 0), `🐾 手機橫向(fit-play):${petLand.visible ? `坐 ${petLand.placement}、頭在小窗裡(${petLand.head.x}, ${petLand.head.y})、不蓋格子、不被蓋${petLand.hits.length ? ":" + petLand.hits.join(",") : ""}` : "放不下就藏(OK)"}`);
+ok(petLand.clickCenter === "board" && petLand.clickFar === "board", "🐾 手機橫向:小窗不擋點擊");
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(1200);
+const petPort = await petProbe();
+ok(petPort.visible && petPort.head.inside && petPort.overlapPx <= 8, `🐾 手機直向:坐 ${petPort.placement}、頭在小窗裡(${petPort.head.x}, ${petPort.head.y})、不蓋格子(重疊 ${petPort.overlapPx}px)`);
+await page.setViewportSize({ width: 1100, height: 800 });
+await page.waitForTimeout(900);
+/* 走一手(e2→e4)等牠回手:think 在牠開算時、place / reach / hop 在牠落子後 —— 看 figs.log,不是 grep 程式碼 */
+const moved = await page.evaluate(async () => {
+  const c = window.__chess; const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  c.handleSquareClick("e2"); c.handleSquareClick("e4");
+  for (let i = 0; i < 80 && !(c.state.game.turn() === "w" && !c.state.aiThinking); i++) await sleep(250);
+  await sleep(200);
+  return { turn: c.state.game.turn(), log: c.pet.figs.log.map((e) => e.kind) };
+});
+ok(moved.turn === "w" && moved.log.includes("think") && ["place", "reach", "hop"].some((k) => moved.log.includes(k)), `🐾 事件真的接到(figs.log):${moved.log.join(",")}`);
+const pose = await page.evaluate(() => {
+  const O = window.__chess.pet, f = O.figure, F = O.figs;
+  const said = []; const o = O.voice.say.bind(O.voice); O.voice.say = (a, e, d) => { said.push(a + ":" + e); return o(a, e, d); };
+  O.react("win", "win"); F.update(0.4);
+  const up = { armL: +f.arms[0].rotation.x.toFixed(2), armR: +f.arms[1].rotation.x.toFixed(2), open: f.mouthOpen.visible };
+  F.update(3.5); F.update(0.5);
+  const back = { armL: +f.arms[0].rotation.x.toFixed(2), smile: f.smile.visible };
+  O.react("lose", "lose"); F.update(0.4);
+  const sad = { pitch: +f.head.rotation.x.toFixed(2), smileZ: +f.smile.rotation.z.toFixed(2) };
+  F.update(3.5); F.update(0.5);
+  O.react("think", null); F.update(0.4);
+  const think = { armR: +f.arms[1].rotation.x.toFixed(2), tilt: +f.head.rotation.z.toFixed(2) };
+  O.cancel(); F.update(1);
+  O.voice.say = o;
+  return { up, back, sad, think, said };
+});
+ok(pose.up.armL < -2.2 && pose.up.armR < -2.2 && pose.up.open, `🐾 win:雙手高舉 + 張嘴(${JSON.stringify(pose.up)})`);
+ok(Math.abs(pose.back.armL + 1.2) < 0.15 && pose.back.smile, `🐾 反應完回休息姿勢、笑臉回來(${JSON.stringify(pose.back)})`);
+ok(pose.sad.pitch > 0.3 && pose.sad.smileZ < 1.6, `🐾 lose:低頭 + 苦臉(${JSON.stringify(pose.sad)})`);
+ok(pose.think.armR < -1.9 && pose.think.tilt < -0.05, `🐾 think:手托腮、頭歪(${JSON.stringify(pose.think)})`);
+ok(pose.said.join(" ") === "cat:win cat:lose", `🗣 同一個入口也叫了人聲:${pose.said.join(" ")}`);
+await page.click('#petRow [data-pet="off"]');
+await page.waitForTimeout(300);
+const off = await page.evaluate(() => ({ hidden: document.querySelector("#petCanvas").hidden, visible: window.__chess.pet.figure.group.visible, saved: localStorage.getItem("3d-chess-co-pet"), chip: document.querySelector("#aiChip").textContent, petOn: document.body.classList.contains("pet-on") }));
+ok(off.hidden && off.visible === false && off.saved === "off" && off.chip === "黑方：AI" && !off.petOn, `🐾 關掉 ⇒ 小窗藏起來、localStorage 記 off、名牌回「黑方：AI」(${JSON.stringify(off)})`);
+await page.click('#petRow [data-pet="mute"]');
+await page.waitForTimeout(300);
+const mute = await page.evaluate(() => ({ hidden: document.querySelector("#petCanvas").hidden, voiceOn: window.__chess.pet.voiceOn }));
+ok(mute.hidden === false && mute.voiceOn === false, `🐾 不出聲 ⇒ 還坐著、不唸(${JSON.stringify(mute)})`);
+await page.click('#petRow [data-pet="voice"]');
+await page.waitForFunction(() => window.__chess.voice && window.__chess.voice.ready(), null, { timeout: 10000 }).catch(() => {});
+const v = await page.evaluate(() => ({ ready: window.__chess.voice.ready(), has: window.__chess.voice.has("owl", "draw"), yes: window.__chess.voice.say("cat", "win"), no: window.__chess.voice.say("cat", "nope") }));
+ok(v.ready && v.has && v.yes === true && v.no === false, `🗣 人聲 runtime:manifest 載到、cat-win 送去放、沒烤的不唸(${JSON.stringify(v)})`);
+await page.click("#dailyButton");
+await page.waitForFunction(() => window.__chess.state.daily && window.__chess.pet.kind === "owl", null, { timeout: 5000 });
+const owl = await page.evaluate(() => ({ ...window.__chess.pet.probe(), chip: document.querySelector("#aiChip").textContent }));
+ok(owl.kind === "owl" && owl.visible && owl.head.inside && /🦉/.test(owl.chip), `🐾 每日殘局 ⇒ 🦉 貓頭鷹守黑方(${owl.chip};頭 ${owl.head.x}, ${owl.head.y})`);
+
 ok(errors.length === 0, "整場零 pageerror", errors.join(" | ").slice(0, 200));
 
 await browser.close();

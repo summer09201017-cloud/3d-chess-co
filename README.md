@@ -30,6 +30,22 @@
   按下切 `body.menu-folded`:CSS 藏掉 `aside.control-column`(對戰設定/對局資訊/棋盤顯示/存檔區/步數回看)與標題文字 `.hero-copy`,`.layout` 變單欄、`.board` 上限 720→840px(桌機棋盤真的變大;手機本來就滿寬,好處是頁面短很多)。
   重新開局/每日殘局那排鈕與棋盤下方工具列(提示/悔棋/上一步…)都留著。狀態記 localStorage `3d-chess-co.menuFolded`(讀寫包 try/catch),
   `index.html` `<body>` 開頭一支小 script 第一幀先套 class 不閃;切換後補發一次 `resize`。`aria-expanded` 跟著切。驗收:`scripts/check-fold.mjs`。
+- 🐾 **動物對手坐到你對面**(v31 / sw v31,2026-09-28,HFP 機・0928-3D動物對手-象棋家族-家裡 場;skill `animal-opponent-kit` 象棋家族六站同一場接,本站是「**CSS 斜視站的透明 WebGL 小窗**」範式):
+  輕鬆 🐰 白兔 / 標準 🐱 橘貓 / 高手 🐻 棕熊;📅 每日殘局 🦉 貓頭鷹守黑方;本站永遠白方玩家 vs 黑方 AI,所以只有「會說話 / 不出聲 / 關」三段(對戰設定卡,localStorage `3d-chess-co-pet`)。
+  ① 本站棋盤是 CSS `perspective + rotateX` 的 DOM、沒有 three 場景 ⇒ 牠住在 `<canvas id="petCanvas">`(WebGL alpha)裡,疊在棋盤遠端正上方;
+    `js/opponent.js` 每次版面變(applyBoardView / resize / fitBoard 之後每 0.5s)量棋盤**投影框**(`getBoundingClientRect` 含棋子與棋名標籤聯集):
+    上面有空位 ⇒ 正上方置中(高 = 空位 ÷ 0.78,可壓進投影框 22%,寬 = 高 × 1.1、≤ 棋盤寬 45%);沒有(手機橫向 fit-play)⇒ 右上;都 < 64px ⇒ 藏。
+    小窗 z-index 在 `.board-scene` **底下** ⇒ 牠的下半身被桌子 / 棋子自然遮住 = 坐在桌子後面;`pointer-events:none` 永遠不擋點擊;拖曳棋盤中不量版面(v29 LAG 教訓)。
+    直向手機棋盤寬度卡住、上面本來只剩幾十 px ⇒ `body.pet-on:not(.fit-play) .scene-wrap { padding-top:100px }`(一般長頁本來就會捲;fit-play 一屏不留)。
+  ② three r128 從 CDN 載成全域(跟象棋家族同一支,`sw.js` 快取)+ import map `three → ./js/three-shim.js`(全域 → 具名匯出 + 補 CapsuleGeometry);
+    `app.js` 用 **dynamic import()** 載 `js/opponent.js` / `js/voice.js`:CDN 沒載到(離線第一次開)或舊瀏覽器 ⇒ `pet = null`、棋照下、一行 warn。
+  ③ 小窗相機:fov 35、從前上方 15° 看牠的胸口,二分距離讓「凳面 → 耳尖(+0.55)」在 NDC ±0.93 內;自己的 scene + 環境光 + 主光 + 補光;rAF 只在牠可見時跑、分頁背景暫停。
+  ④ 反應跟 AI 流程同一個分岔:牠開算 `think()`(人聲每三手)/ 走完 place・吃子 reach・將你的軍 hop+「將軍!」/ 你吃牠的子・將牠的軍 gasp+「哇」(放在 maybeRunAiMove 之後,才不會被 think 蓋掉)/
+    將死 win・被將死 lose・和局 shrug+「平手」(一局一次,用 `state.game` 身分去重,跟 psDone 同一招;開場讀到已結束的存檔不慶祝);等你太久閒聊 15s / 30s、一回合兩句。
+  ⑤ 人聲照 baked-voice 三件套:`npm run voice`(= `gen-voice.mjs --phrases js/voicePhrases.js --out voice --sw sw.js`)⇒ `voice/` 36 支 mp3 + manifest,`sw.js` 的 voice:begin~end 段照目錄重生。
+  ⑥ 驗:`browser-check` +30(檔案對賬 / 引擎與 skill 逐位元同一份 / 三段開關 / 小窗在棋盤本體上方不蓋格子 / e4・e8 elementFromPoint 不是小窗 / 頭在小窗裡 ×3 視口 / 臉沒被 HUD 蓋 /
+    figs.log 有 think+place / 姿勢手動推時間 / off・mute / 人聲 runtime / 每日 🦉)⇒ **58/0**;check-fit 42/0、check-fold 48/0、npm test 全綠;四張截圖目視(桌機 / 收起選單 / 手機橫向 / 直向)。
+  ⚠ 姿勢一律 `pet.figs.update(0.4)` 手動推時間(無頭 fps 低);`pet.probe()` 回小窗座標的頭頂 NDC + 頁面 px 的頭框與小窗框。
 - 🎥 **視角工具列跟其他五款 3D 棋類長一樣**(v30,2026-09-20,使用者拍板「兩邊都做,六款 3D 棋類的視角工具列長一樣:預設三段 + 滑桿微調 + 換邊 + 重置」):
   `view-kit.js` **逐字複製自** skill `board3d-kit/assets/view-kit.js`(**不要改複本**,要改就改 skill 那份再抄回來),`app.js` init 段用 `mountViewKit(#viewKitMount, adapter)` 掛進「棋盤顯示」卡。
   內容:預設三段(斜俯視 58° / 正俯視 88° / 對局視角 34°)+ 水平旋轉 0–359° + 俯視角度 20–88° 兩條滑桿 + 🔃 換邊(轉 180°,兩人同機)+ 🎯 重置視角。
@@ -48,7 +64,9 @@
 | `ai.js` | AI(`getBestMove`,提示也借它) |
 | `puzzles.js` | 每日殘局題庫(16 題,含證明步數) |
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v30"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914))) |
+| `js/animals.js` `js/voice.js` `js/three-shim.js` | 🐾 動物引擎 / 🗣 人聲 runtime / 全域 THREE→ESM shim(與 skill animal-opponent-kit/assets **同一份,不要在這裡改**;browser-check 逐位元對賬) |
+| `js/opponent.js` `js/voicePhrases.js` | 本站的動物接線(透明小窗 / 量投影框放哪 / 小窗相機 / 反應 / 閒聊 / probe)與四隻的唸稿;`scripts/gen-voice.mjs` 烤 mp3 → `voice/`(npm run voice) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v31"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914)、v27=fit-play、v28=SW index.html 地雷、v29=拖曳不 LAG、v30=view-kit、v31=🐾 動物對手(0928))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` / `test/ai.mjs` | `npm test`:每日殘局資料檢查 + 提示品質/AI 可走 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |
@@ -93,4 +111,5 @@ curl -s "https://3dchesscodex.pages.dev/sw.js?b=$RANDOM" | grep CACHE_NAME   # �
 
 ---
 GitHub:`summer09201017-cloud/3d-chess-co`。本 README 2026-09-03 補(此前文件沒寫網址,作品集對賬只能靠名字猜到本 repo)。
+- ✅ **🐾 動物對手已上線(0928,sw v31 / verTag v31)**:見「功能」段第一條。象棋家族六站同一場接;本站是 CSS 站「透明 WebGL 小窗」接法的範式,通則回寫 skill `animal-opponent-kit`(主線負責)。
 - ✅ **🎥 視角工具列統一(view-kit)已上線(0920,sw v30 / verTag v30)**:見「功能」段。六站同修(3D-Xiangqi / 3d-chinese-chess / 3D-Chess / xiangqi-arena / gomoku3d 各自接線),共用檔正本在 skill `board3d-kit/assets/view-kit.js`。
