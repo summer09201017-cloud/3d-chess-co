@@ -2,7 +2,7 @@
 //    Cloudflare Pages 把 /index.html 308 轉到 / ⇒ 名單裡有 "./index.html" 的話 install 存到的是 redirected:true 的回應,
 //    導覽拿到它瀏覽器直接拒收 ⇒ 裝成 App 開就 ERR_FAILED;每次 bump SW 重踩。⇒ 名單與離線退路只認 "./",永遠不要再把 index.html 加回來。
 //    同時 addAll(全部或全無)改成逐一 add + catch:一個檔抓不到不再整批沒快取。
-const CACHE_NAME = "3d-chess-co-v31";
+const CACHE_NAME = "3d-chess-co-v32";
 const APP_SHELL = [
   "./",
   "./styles.css",
@@ -17,6 +17,7 @@ const APP_SHELL = [
   "./js/voice.js",
   "./js/opponent.js",
   "./js/voicePhrases.js",
+  "./js/dice-toss.js",
   /* voice:begin(scripts/gen-voice.mjs 照目錄重生,不手抄) */
   "./voice/manifest.json",
   "./voice/bear-chat1.mp3",

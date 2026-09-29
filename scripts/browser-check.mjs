@@ -348,6 +348,54 @@ await page.waitForFunction(() => window.__chess.state.daily && window.__chess.pe
 const owl = await page.evaluate(() => ({ ...window.__chess.pet.probe(), chip: document.querySelector("#aiChip").textContent }));
 ok(owl.kind === "owl" && owl.visible && owl.head.inside && /🦉/.test(owl.chip), `🐾 每日殘局 ⇒ 🦉 貓頭鷹守黑方(${owl.chip};頭 ${owl.head.x}, ${owl.head.y})`);
 
+/* 🎲 執子 / 擲骰 / 擲硬幣(0929,skill dice-coin-toss):
+   ★ 刻意緊接在每日殘局之後擲:那時坐著的是 🦉,浮層要印「這一局要坐的」🐱(標準),不是上一局的 🦉(gomoku3d 實測過的坑)。
+   判定=畫面:matrix3d 反推朝上那面 = 記錄值;贏的人執白;執黑 ⇒ AI 先走、棋盤轉 180°、悔棋悔到開局 AI 再走一次。
+   ★ 等「開始鈕出現 / AI 走完」這種狀態,不用 waitForTimeout 等動畫(無頭 fps 低)。 */
+console.log("—— 🎲 擲骰決定先後 ——");
+const sideState = () => page.evaluate(() => { const s = window.__chess.state; return {
+  color: s.humanColor, plies: s.game.history().length, turn: s.game.turn(), rot: Math.round(s.cameraRotation), thinking: s.aiThinking,
+  tile: document.querySelector("#turnValue").textContent, you: document.querySelector("#youChip").textContent, ai: document.querySelector("#aiChip").textContent,
+  selectable: [...document.querySelectorAll(".square.selectable")].length }; });
+ok(await page.locator("#sideRow .side-opt").count() === 4, "🎲 對戰設定多一排執子:白 / 黑 / 擲骰 / 擲硬幣");
+for (const kind of ["dice", "coin"]) {
+  await page.click(`#sideRow [data-side="${kind}"]`);
+  await page.click("#newGameButton");
+  await page.waitForSelector(".dt-ov .dt-go:not([hidden])", { timeout: 15000 });
+  const t = await page.evaluate(async () => {
+    const els = [...document.querySelectorAll(".dt-die,.dt-coin")];
+    return { shown: (await Promise.all(els.map((el) => window.__chess.topFace(el)))).map(String), rec: els.map((el) => el.dataset.v), msg: document.querySelector(".dt-msg").textContent,
+      seats: [...document.querySelectorAll(".dt-seat")].map((s) => s.textContent.trim().slice(0, 12)),
+      firstSeat: [...document.querySelectorAll(".dt-seat")].findIndex((s) => s.classList.contains("first")), goH: document.querySelector(".dt-go").getBoundingClientRect().height };
+  });
+  ok(t.shown.join() === t.rec.join(), `${kind}:畫面朝上 = 記錄值(畫面 ${t.shown} / 記錄 ${t.rec})`);
+  ok(t.goH >= 44, `${kind}:開始鈕 ≥44px(${t.goH})`);
+  if (kind === "dice") ok(t.seats.some((s) => s.includes("🐱")) && !t.seats.some((s) => s.includes("🦉")), `🎲 浮層是這一局要坐的 🐱(標準),不是上一局的 🦉(${t.seats.join(" / ")})`);
+  const youFirst = kind === "coin" ? t.shown[0] === "heads" : t.firstSeat === 0;
+  await page.click(".dt-go");
+  await page.waitForFunction(() => !document.querySelector(".dt-ov"), null, { timeout: 5000 });
+  await page.waitForFunction(() => { const s = window.__chess.state; return !s.aiThinking && s.game.turn() === s.humanColor; }, null, { timeout: 20000 });
+  const s = await sideState();
+  ok(s.color === (youFirst ? "w" : "b") && s.rot === (s.color === "b" ? 180 : 0) && s.plies === (s.color === "b" ? 1 : 0), `${kind}:${t.msg} ⇒ 你執 ${s.color}、棋盤 ${s.rot}°、已走 ${s.plies} 手`);
+}
+await page.click('#sideRow [data-side="b"]');
+await page.click("#newGameButton");
+await page.waitForFunction(() => { const s = window.__chess.state; return s.humanColor === "b" && s.game.history().length === 1 && !s.aiThinking; }, null, { timeout: 20000 });
+const blk = await sideState();
+ok(blk.rot === 180 && blk.turn === "b" && blk.selectable > 0, `⚫ 我執黑 ⇒ AI 執白先走一手、棋盤轉 180°、黑子可選(${blk.selectable} 格)`);
+ok(/黑方\(你\)/.test(blk.tile) && blk.you === "黑方：玩家" && /^白方：/.test(blk.ai), `⚫ 名牌 / 輪到:${blk.tile}・${blk.you}・${blk.ai}`);
+await page.screenshot({ path: process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/cc-black-side.png` : "cc-black-side.png" }).catch(() => {});
+const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("3d-chess-co:auto-save:v1") || "{}").humanColor);
+ok(saved === "b", `⚫ 自動存檔記得執黑(humanColor ${saved})`);
+await page.click("#undoButton");
+await page.waitForFunction(() => { const s = window.__chess.state; return s.game.history().length === 1 && !s.aiThinking && s.game.turn() === "b"; }, null, { timeout: 20000 });
+ok(true, "⚫ 悔棋悔到開局 ⇒ AI 執白再走一次、又輪到你");
+await page.click('#sideRow [data-side="w"]');
+await page.click("#newGameButton");
+await page.waitForFunction(() => window.__chess.state.humanColor === "w", null, { timeout: 5000 });
+const wht = await sideState();
+ok(wht.rot === 0 && wht.plies === 0 && wht.turn === "w" && wht.you === "白方：玩家", `⚪ 我執白 ⇒ 你先走、棋盤回 0°(${JSON.stringify(wht)})`);
+
 ok(errors.length === 0, "整場零 pageerror", errors.join(" | ").slice(0, 200));
 
 await browser.close();

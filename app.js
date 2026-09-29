@@ -66,6 +66,11 @@ const state = {
      局面沒變就重用同一手,不重算:getBestMove 的同分手順序不保證穩定,
      每按一次重算會讓建議在幾手之間跳來跳去,看起來像跳針。 */
   hint: null,
+  /* 🎲 執子(0929):humanColor = 這一局你執哪色('w'|'b');sidePick = 設定欄選的('w'|'b'|'dice'|'coin')。
+     ★ dice / coin 永遠不流進棋局 —— startNewGame 先解成真顏色。每日殘局一律 'w'。存檔 / 自動存檔記 humanColor。 */
+  humanColor: "w",
+  sidePick: "w",
+  newGameGen: 0,            // 擲骰那幾秒又按了一次新局 ⇒ 前一次作廢
   hintBusy: false,          // 提示正在算(先畫「想一下…」、下一個 tick 才算的那個空檔),防連按算兩次
 };
 
@@ -80,6 +85,11 @@ let pet = null;
 const petCanvasElement = document.querySelector("#petCanvas");
 const PET_LEVEL = { easy: "rabbit", medium: "cat", hard: "bear" };
 function petKind() { return state.daily ? "owl" : (PET_LEVEL[state.difficulty] || "cat"); }
+/* 🎲 誰是誰(0929):取代原本寫死的 "w"(玩家)/ "b"(AI) */
+const aiColor = () => (state.humanColor === "w" ? "b" : "w");
+const colorName = (c) => (c === "w" ? "白方" : "黑方");
+/** 你這一邊在「近端」的基準方位:執黑 = 棋盤轉 180°(🎯 重置視角也回這裡) */
+const baseRotation = () => (state.humanColor === "b" ? 180 : DEFAULT_CAMERA_ROTATION);
 async function initPet() {
   if (!petCanvasElement || pet) return;
   try {
@@ -103,15 +113,17 @@ async function initPet() {
 /** 每次 render 對一次:誰坐、等不等你、名牌、一局結束的反應(一局一次) */
 function syncPet() {
   const chip = document.querySelector("#aiChip");
-  if (!pet) { if (chip) chip.textContent = "黑方：AI"; return; }
+  const you = document.querySelector("#youChip");
+  if (you) you.textContent = `${colorName(state.humanColor)}：玩家`;
+  if (!pet) { if (chip) chip.textContent = `${colorName(aiColor())}：AI`; return; }
   pet.seat(petKind());
   const over = state.game.isGameOver();
-  pet.waiting = !over && !state.aiThinking && !isViewingHistory() && state.game.turn() === "w";
+  pet.waiting = !over && !state.aiThinking && !isViewingHistory() && state.game.turn() === state.humanColor;
   document.body.classList.toggle("pet-on", pet.on);
-  if (chip) chip.textContent = pet.on ? `黑方：${pet.emoji} ${pet.name}` : "黑方：AI";
+  if (chip) chip.textContent = pet.on ? `${colorName(aiColor())}：${pet.emoji} ${pet.name}` : `${colorName(aiColor())}：AI`;
   if (over && pet.endedFor !== state.game) {
     pet.endedFor = state.game;
-    if (state.game.isCheckmate()) { const w = state.game.turn() === "w"; pet.react(w ? "win" : "lose", w ? "win" : "lose", 250); }
+    if (state.game.isCheckmate()) { const w = state.game.turn() === state.humanColor; pet.react(w ? "win" : "lose", w ? "win" : "lose", 250); }
     else pet.react("shrug", "draw", 250);
   }
 }
@@ -698,7 +710,7 @@ function renderBoard() {
       squareButton.className = `square ${squareColor(fileIndex, rank)}`;
       squareButton.classList.toggle(
         "selectable",
-        atLatest && piece && piece.color === "w" && displayGame.turn() === "w" && !state.aiThinking,
+        atLatest && piece && piece.color === state.humanColor && displayGame.turn() === state.humanColor && !state.aiThinking,
       );
       squareButton.classList.toggle("selected", state.selectedSquare === squareName);
       squareButton.classList.toggle("legal", state.legalTargets.includes(squareName));
@@ -753,7 +765,8 @@ function buildStatusMessage(game, historyLength, displayPly) {
   }
 
   if (game.isCheckmate()) {
-    return game.turn() === "w" ? "將軍！黑方獲勝。" : "將軍！白方獲勝。";
+    const winner = game.turn() === "w" ? "b" : "w";
+    return `將軍！${colorName(winner)}${state.daily ? "" : winner === state.humanColor ? "(你)" : "(AI)"}獲勝。`;
   }
 
   if (game.isStalemate()) {
@@ -777,10 +790,10 @@ function buildStatusMessage(game, historyLength, displayPly) {
   }
 
   if (game.isCheck()) {
-    return game.turn() === "w" ? "白方被將軍，請立即應對。" : "黑方被將軍，AI 正在尋找解法。";
+    return game.turn() === state.humanColor ? `${colorName(game.turn())}被將軍，請立即應對。` : `${colorName(game.turn())}被將軍，AI 正在尋找解法。`;
   }
 
-  return game.turn() === "w" ? "輪到白方，請選擇棋子後再點目的地。" : "輪到黑方，AI 即將落子。";
+  return game.turn() === state.humanColor ? `輪到${colorName(game.turn())}（你），請選擇棋子後再點目的地。` : `輪到${colorName(game.turn())}，AI 即將落子。`;
 }
 
 /* 📱 內建瀏覽器偵測(守門 #30):教會連結走 LINE 發,LINE 的 WebView 裝不了 APP——
@@ -840,7 +853,7 @@ function renderStatus() {
   const lastMove = getLastMove(displayGame);
   const boardModeLabel = state.boardMode === "3d" ? "3D" : "2D";
 
-  turnValueElement.textContent = displayGame.turn() === "w" ? "白方" : "黑方";
+  turnValueElement.textContent = colorName(displayGame.turn()) + (state.daily ? "" : displayGame.turn() === state.humanColor ? "(你)" : "(AI)");
   modeValueElement.textContent = isViewingHistory() ? `回看 ${displayPly}/${history.length} · ${boardModeLabel}` : `即時 · ${boardModeLabel}`;
   moveCountValueElement.textContent = String(displayPly);
   lastMoveValueElement.textContent = lastMove?.san ?? "尚未開始";
@@ -942,6 +955,7 @@ function createSavePayload({ useVisiblePly = true } = {}) {
     version: 1,
     savedAt: new Date().toISOString(),
     difficulty: state.difficulty,
+    humanColor: state.humanColor,   // 🎲 0929:舊存檔沒有這欄 ⇒ 讀回來當 "w"(以前只能執白)
     boardMode: state.boardMode,
     cameraRotation: normalizeRotation(state.cameraRotation),
     cameraTilt: clamp(state.cameraTilt, TILT_MIN, TILT_MAX),
@@ -1078,7 +1092,7 @@ function handleSquareClick(squareName) {
     return;
   }
 
-  if (state.game.turn() !== "w" || state.game.isGameOver()) {
+  if (state.game.turn() !== state.humanColor || state.game.isGameOver()) {
     render();
     return;
   }
@@ -1116,7 +1130,7 @@ function handleSquareClick(squareName) {
     return;
   }
 
-  if (clickedPiece?.color === "w") {
+  if (clickedPiece?.color === state.humanColor) {
     const moves = state.game.moves({ square: squareName, verbose: true });
     state.selectedSquare = squareName;
     state.legalTargets = moves.map((move) => move.to);
@@ -1129,7 +1143,7 @@ function handleSquareClick(squareName) {
 }
 
 function maybeRunAiMove() {
-  if (state.aiThinking || state.game.turn() !== "b" || state.game.isGameOver() || isViewingHistory()) {
+  if (state.aiThinking || state.game.turn() !== aiColor() || state.game.isGameOver() || isViewingHistory()) {
     render();
     return;
   }
@@ -1167,7 +1181,7 @@ function undoRound() {
   state.displayPly = null;
   state.dailySaved = false;   // 📅 悔棋後重新將死可再記(取當日最少,不會灌水)
 
-  const steps = state.game.turn() === "w" ? 2 : 1;
+  const steps = state.game.turn() === state.humanColor ? 2 : 1;
 
   for (let index = 0; index < steps; index += 1) {
     if (!state.game.history().length) {
@@ -1179,6 +1193,7 @@ function undoRound() {
 
   saveAuto();
   render();
+  maybeRunAiMove();   // 🎲 你執黑、悔到開局 ⇒ 又輪到 AI 執白先走
 }
 
 function goToPly(ply) {
@@ -1213,6 +1228,7 @@ function restoreFromPayload(payload) {
   cancelAiThink();
   state.game = buildGameFromMoves(payload.moves);
   state.difficulty = DIFFICULTY_PRESETS[payload.difficulty] ? payload.difficulty : "medium";
+  state.humanColor = payload.humanColor === "b" ? "b" : "w";
   state.displayPly = null;
   state.boardMode = payload.boardMode === "2d" ? "2d" : DEFAULT_BOARD_MODE;
   state.cameraRotation = Number.isFinite(payload.cameraRotation) ? normalizeRotation(payload.cameraRotation) : DEFAULT_CAMERA_ROTATION;
@@ -1295,15 +1311,40 @@ async function handleInstallClick() {
   render();
 }
 
-function startNewGame() {
+/* 🎲 這一局你執哪色(0929,skill dice-coin-toss):選了擲骰 / 擲硬幣才開浮層,贏的人執白(白先走)。
+   ★ 浮層上的臉用「這一局要坐的那隻」(PET_LEVEL[難度]),不是 pet.kind —— 那可能是上一局的(每日殘局的 🦉;gomoku3d 實測)。
+   ⚠ dice-toss.js 載不進來 ⇒ 靜默亂數,照樣分得出誰先。 */
+async function pickHumanColor() {
+  const pick = state.sidePick;
+  if (pick === "w" || pick === "b") return pick;
+  try {
+    const [{ tossForOrder }, { ANIMALS }] = await Promise.all([import("./js/dice-toss.js"), import("./js/animals.js")]);
+    const A = ANIMALS[PET_LEVEL[state.difficulty] || "cat"];
+    const foe = pet && pet.mode !== "off" && A ? `${A.emoji} ${A.name}` : `🤖 AI(${DIFFICULTY_PRESETS[state.difficulty].label})`;
+    const r = await tossForOrder({ players: ["你", foe], mode: pick, firstText: (name) => `${name} 先!執 ⚪ 白方` });
+    return r.first === 0 ? "w" : "b";
+  } catch (e) {
+    console.warn("🎲 擲骰浮層沒載起來,改用亂數決定", e);
+    return Math.random() < 0.5 ? "w" : "b";
+  }
+}
+
+async function startNewGame() {
+  const gen = ++state.newGameGen;
   cancelAiThink();
+  const color = await pickHumanColor();
+  if (gen !== state.newGameGen) return;   // 擲骰那幾秒又按了一次新局
+  cancelAiThink();
+  state.humanColor = color;
   state.game = new Chess();
   state.daily = null;        // 離開每日模式,回一般對局
   state.dailySaved = false;
   state.displayPly = null;
   clearSelection();
+  updateBoardView({ cameraRotation: baseRotation() });   // 🎲 你那一邊轉到近端
   saveAuto();
   render();
+  maybeRunAiMove();          // 🎲 你執黑 ⇒ AI 執白先走
 }
 
 /* ══ 📅 每日殘局(N 步殺)══
@@ -1365,6 +1406,10 @@ function startDailyGame(n) {
   const puzzle = set.puzzles[idx];
   state.daily = { key, set, n: idx, puzzle };
   state.dailySaved = false;
+  if (state.humanColor !== "w") {   // 🎲 殘局一律你執白(題目是白先殺)
+    state.humanColor = "w";
+    updateBoardView({ cameraRotation: baseRotation() });
+  }
   state.game = new Chess(puzzle.fen);
   state.displayPly = null;
   clearSelection();
@@ -1396,7 +1441,7 @@ function evaluateDaily() {
 function resetBoardView() {
   updateBoardView({
     boardMode: state.boardMode,
-    cameraRotation: DEFAULT_CAMERA_ROTATION,
+    cameraRotation: baseRotation(),   // 🎲 執黑 = 黑方在近端
     cameraTilt: DEFAULT_CAMERA_TILT,
     persist: true,
   });
@@ -1563,7 +1608,18 @@ function registerEvents() {
   });
 
   installButtonElement.addEventListener("click", handleInstallClick);
-  newGameButtonElement.addEventListener("click", startNewGame);
+  newGameButtonElement.addEventListener("click", () => startNewGame());
+  /* 🎲 執子四顆:只改選擇、按「重新開局」才生效(不砍掉進行中的棋)。
+     ⚠ 試過「還沒下就直接開局」:一樣按 🎲,有時馬上跳浮層、有時不跳(看上一局有沒有人走過),反而難懂 ⇒ 一律等你按。 */
+  const sideOpts = document.querySelectorAll("#sideRow .side-opt");
+  const paintSide = () => sideOpts.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.side === state.sidePick)));
+  sideOpts.forEach((b) => b.addEventListener("click", () => {
+    state.sidePick = b.dataset.side;
+    paintSide();
+    setMessage("執子改好了,按「重新開局」就照這個開始。");
+    render();
+  }));
+  paintSide();
   /* ★ 包一層:直接掛 startDailyGame 會把 click event 當成 n 參數傳進去
      (Number.isInteger(event) 是 false 所以剛好沒壞——但那是巧合,不留這種接線)。 */
   document.querySelector("#dailyButton")?.addEventListener("click", () => startDailyGame());
@@ -1717,6 +1773,7 @@ function registerServiceWorker() {
 
 function boot() {
   loadAuto();
+  state.sidePick = state.humanColor;   // 🎲 讀回來的那局執哪色,設定欄就亮哪顆
   registerEvents();
   registerServiceWorker();
   renderSaveSlots();
@@ -1730,5 +1787,5 @@ function boot() {
 boot();
 
 // 測試掛勾(驗收腳本用;艦隊慣例)——真人操作不經過它
-window.__chess = { state, startDailyGame, whiteMoveCount, handleSquareClick, startNewGame, get pet() { return pet; } };
+window.__chess = { state, topFace: (el) => import("./js/dice-toss.js").then((m) => m.topFace(el)), startDailyGame, whiteMoveCount, handleSquareClick, startNewGame, get pet() { return pet; } };
 initPet();   // 🐾 最後才載(dynamic import;three CDN 沒到就沒動物)

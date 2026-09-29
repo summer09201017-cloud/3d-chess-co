@@ -1061,3 +1061,6 @@ body.fit-play:not(.panels-open).tools-folded .status-text { font-size: 12px; lin
 }
 .pet-field .pet-opt[aria-pressed="true"] { background: rgba(125, 211, 252, 0.3); border-color: rgba(125, 211, 252, 0.8); font-weight: 700; }
 .pet-field .pet-note { margin: 0; }
+/* 🎲 執子列(0929):四顆排 2×2(一列四顆在手機上字會擠成兩行) */
+.pet-field .side-opts { display: grid; grid-template-columns: 1fr 1fr; }
+.pet-field .side-opt { min-height: 44px; }

@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "msedge-tts": "^2.0.8",
-    "playwright-core": "^1.62.1"
+    "playwright-core": "^1.62.1",
+    "three": "^0.128.0"
   }
 }

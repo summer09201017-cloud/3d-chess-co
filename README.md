@@ -30,6 +30,12 @@
   按下切 `body.menu-folded`:CSS 藏掉 `aside.control-column`(對戰設定/對局資訊/棋盤顯示/存檔區/步數回看)與標題文字 `.hero-copy`,`.layout` 變單欄、`.board` 上限 720→840px(桌機棋盤真的變大;手機本來就滿寬,好處是頁面短很多)。
   重新開局/每日殘局那排鈕與棋盤下方工具列(提示/悔棋/上一步…)都留著。狀態記 localStorage `3d-chess-co.menuFolded`(讀寫包 try/catch),
   `index.html` `<body>` 開頭一支小 script 第一幀先套 class 不閃;切換後補發一次 `resize`。`aria-expanded` 跟著切。驗收:`scripts/check-fold.mjs`。
+- 🎲 **執子 + 擲骰 / 擲硬幣決定先後**(v32 / sw v32,2026-09-29,HFP 機・0929-骰2骰3-家裡 場;skill `dice-coin-toss`,大表骰3):
+  ★ 大表原寫「已有選邊 = S」不成立 —— 本站玩家寫死執白 ⇒ 先做「可執黑、AI 執白先走」。對戰設定 `#sideRow` 四顆(⚪ 白 / ⚫ 黑 / 🎲 / 🪙),**只改選擇、按「重新開局」才生效**
+  (試過「還沒下就直接開局」,同一顆鈕有時跳浮層有時不跳,反而難懂)。`state.humanColor`('w'|'b')取代所有寫死的 "w"/"b"(點擊、可選格、AI 接手、悔棋步數、名牌、狀態文字、動物等你 / 將死反應);
+  `startNewGame` 改 async(`newGameGen` 丟掉擲骰期間的重複按)、執黑 ⇒ `cameraRotation` 180 + AI 先走;悔到開局 AI 再走;🎯 重置視角回 `baseRotation()`;每日殘局一律執白;
+  存檔 / 自動存檔多 `humanColor`(舊檔沒有 ⇒ "w")。浮層臉用 `PET_LEVEL[難度]`(browser-check 刻意接在每日 🦉 之後擲,驗印的是 🐱)。`js/dice-toss.js` = skill 正本同一份。
+  驗:npm test 全綠;browser-check **71/0**(🎲 段 +13,兩跑);執黑截圖目視。
 - 🐾 **動物對手坐到你對面**(v31 / sw v31,2026-09-28,HFP 機・0928-3D動物對手-象棋家族-家裡 場;skill `animal-opponent-kit` 象棋家族六站同一場接,本站是「**CSS 斜視站的透明 WebGL 小窗**」範式):
   輕鬆 🐰 白兔 / 標準 🐱 橘貓 / 高手 🐻 棕熊;📅 每日殘局 🦉 貓頭鷹守黑方;本站永遠白方玩家 vs 黑方 AI,所以只有「會說話 / 不出聲 / 關」三段(對戰設定卡,localStorage `3d-chess-co-pet`)。
   ① 本站棋盤是 CSS `perspective + rotateX` 的 DOM、沒有 three 場景 ⇒ 牠住在 `<canvas id="petCanvas">`(WebGL alpha)裡,疊在棋盤遠端正上方;
@@ -66,7 +72,7 @@
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
 | `js/animals.js` `js/voice.js` `js/three-shim.js` | 🐾 動物引擎 / 🗣 人聲 runtime / 全域 THREE→ESM shim(與 skill animal-opponent-kit/assets **同一份,不要在這裡改**;browser-check 逐位元對賬) |
 | `js/opponent.js` `js/voicePhrases.js` | 本站的動物接線(透明小窗 / 量投影框放哪 / 小窗相機 / 反應 / 閒聊 / probe)與四隻的唸稿;`scripts/gen-voice.mjs` 烤 mp3 → `voice/`(npm run voice) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v31"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914)、v27=fit-play、v28=SW index.html 地雷、v29=拖曳不 LAG、v30=view-kit、v31=🐾 動物對手(0928))) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v32"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914)、v27=fit-play、v28=SW index.html 地雷、v29=拖曳不 LAG、v30=view-kit、v31=🐾 動物對手(0928)、v32=🎲 執子 + 擲骰(0929))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` / `test/ai.mjs` | `npm test`:每日殘局資料檢查 + 提示品質/AI 可走 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |
