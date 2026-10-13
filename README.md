@@ -72,7 +72,7 @@
 | `vendor/chess.js` | 規則引擎(不要改成 CDN,離線要能玩) |
 | `js/animals.js` `js/voice.js` `js/three-shim.js` | 🐾 動物引擎 / 🗣 人聲 runtime / 全域 THREE→ESM shim(與 skill animal-opponent-kit/assets **同一份,不要在這裡改**;browser-check 逐位元對賬) |
 | `js/opponent.js` `js/voicePhrases.js` | 本站的動物接線(透明小窗 / 量投影框放哪 / 小窗相機 / 反應 / 閒聊 / probe)與四隻的唸稿;`scripts/gen-voice.mjs` 烤 mp3 → `voice/`(npm run voice) |
-| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v32"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914)、v27=fit-play、v28=SW index.html 地雷、v29=拖曳不 LAG、v30=view-kit、v31=🐾 動物對手(0928)、v32=🎲 執子 + 擲骰(0929))) |
+| `sw.js` | Service Worker,`CACHE_NAME = "3d-chess-co-v33"`(改殼層檔必 +1;**名單/退路不可有 index.html,只認 `./`**;跨站請求(hfpc-feedback 等)一律不進快取,只有同源走 cache-first(1013);verTag 版本簡歷同步改,v13=AI 提示、v14=統計、v15=?daily、v16=手機不溢出、v17=棋子 SVG 重畫、v18=手機放大鈕、v19=3D 旋轉修正、v20=AI 提速、v21=棋名改主教/城堡/騎士、v22=棋名牌+拖曳方向/轉速、v23=題庫題名改城堡/騎士(兩站同步、v24=提示不建議等價交換(SEE+半兵門檻)、v25=版本簡歷可收合(別場 0907 批次)、v26=收起選單(棋盤上方 ▼/▲ 鈕,0914)、v27=fit-play、v28=SW index.html 地雷、v29=拖曳不 LAG、v30=view-kit、v31=🐾 動物對手(0928)、v32=🎲 執子 + 擲骰(0929)、v33=👍 按讚+兩種留言(like-comment-kit,1013))) |
 | `manifest.webmanifest` / `assets/` | PWA 與圖示 |
 | `test/daily.mjs` / `test/ai.mjs` | `npm test`:每日殘局資料檢查 + 提示品質/AI 可走 |
 | `scripts/browser-check.mjs` | 真瀏覽器冒煙檢查(playwright-core + 系統 Edge/Chrome) |

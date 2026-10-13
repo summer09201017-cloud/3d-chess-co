@@ -2,7 +2,7 @@
 //    Cloudflare Pages 把 /index.html 308 轉到 / ⇒ 名單裡有 "./index.html" 的話 install 存到的是 redirected:true 的回應,
 //    導覽拿到它瀏覽器直接拒收 ⇒ 裝成 App 開就 ERR_FAILED;每次 bump SW 重踩。⇒ 名單與離線退路只認 "./",永遠不要再把 index.html 加回來。
 //    同時 addAll(全部或全無)改成逐一 add + catch:一個檔抓不到不再整批沒快取。
-const CACHE_NAME = "3d-chess-co-v32";
+const CACHE_NAME = "3d-chess-co-v33";
 const APP_SHELL = [
   "./",
   "./styles.css",
@@ -85,6 +85,13 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") {
+    return;
+  }
+
+  // 👍 like-comment-kit(1013):跨站請求(hfpc-feedback 的 widget.js / API)一律直接走網路、不進快取,
+  // 否則會把「讚數 0」之類的回應永久快取住(3D-Xiangqi 同族實錘)。只有同源資源才走下面的 cache-first。
+  if (new URL(event.request.url).origin !== self.location.origin) {
+    event.respondWith(fetch(event.request));
     return;
   }
 
